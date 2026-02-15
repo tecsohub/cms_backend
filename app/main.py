@@ -2,7 +2,7 @@
 FastAPI application factory.
 
 Assembles the app, registers all routers, and wires up lifecycle
-events (DB table creation, permission seeding on first start).
+events.  Database schema is managed by Alembic — NOT create_all.
 """
 
 import logging
@@ -41,12 +41,12 @@ def create_app() -> FastAPI:
     # ── Startup / Shutdown ───────────────────────────────────────────
     @app.on_event("startup")
     async def on_startup() -> None:
-        """Create tables (dev convenience) and seed permissions."""
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        logger.info("Database tables ensured.")
+        """Seed permissions & roles on startup.
 
-        # Auto-seed permissions & roles
+        NOTE: Database schema is managed by Alembic migrations.
+        Run `alembic upgrade head` before starting the app.
+        """
+        # Auto-seed permissions & roles (idempotent)
         from sqlalchemy.ext.asyncio import async_sessionmaker
 
         from app.rbac.permission_seed import seed

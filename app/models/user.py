@@ -65,6 +65,7 @@ class User(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         uselist=False,
         lazy="selectin",
         cascade="all, delete-orphan",
+        foreign_keys="[Client.user_id]",
     )
 
     def __repr__(self) -> str:
