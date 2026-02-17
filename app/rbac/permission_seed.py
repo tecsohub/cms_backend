@@ -88,9 +88,19 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
 async def seed(session: AsyncSession) -> None:
     """Create permissions & roles if they don't already exist."""
 
-    # ── Permissions ──────────────────────────────────────────────────
+    # ── Quick check: skip entirely if already seeded ─────────────────
     existing_perms = (await session.execute(select(Permission))).scalars().all()
     existing_codes = {p.code for p in existing_perms}
+
+    expected_perm_codes = {p["code"] for p in PERMISSIONS}
+    expected_role_names = set(ROLE_PERMISSIONS.keys())
+
+    existing_roles = (await session.execute(select(Role))).scalars().all()
+    existing_role_names = {r.name for r in existing_roles}
+
+    if expected_perm_codes <= existing_codes and expected_role_names <= existing_role_names:
+        print("✔  Seed data already present — skipping.")
+        return
     code_to_perm: dict[str, Permission] = {p.code: p for p in existing_perms}
 
     for pdata in PERMISSIONS:
@@ -102,9 +112,6 @@ async def seed(session: AsyncSession) -> None:
     await session.flush()  # ensure IDs are available
 
     # ── Roles ────────────────────────────────────────────────────────
-    existing_roles = (await session.execute(select(Role))).scalars().all()
-    existing_role_names = {r.name for r in existing_roles}
-
     for role_name, perm_codes in ROLE_PERMISSIONS.items():
         if role_name in existing_role_names:
             continue

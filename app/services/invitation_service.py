@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.invitation import Invitation, InvitationStatus
 from app.models.user import User
+from app.services.email_service import send_invitation_email
 
 
 def _generate_invite_token() -> str:
@@ -75,6 +76,14 @@ async def create_invitation(
     )
     db.add(invitation)
     await db.flush()
+
+    # Send invitation email
+    await send_invitation_email(
+        to_email=email,
+        invitation_token=invitation.token,
+        role_assigned=role_assigned,
+    )
+
     return invitation
 
 

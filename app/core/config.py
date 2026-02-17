@@ -29,6 +29,15 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
+    # ── Email / SMTP ─────────────────────────────────────────────────
+    EMAIL_HOST: str = "smtp.gmail.com"
+    EMAIL_PORT: int = 587
+    SENDER_EMAIL: str = ""
+    EMAIL_PASSWORD: str = ""
+
+    # ── Frontend ─────────────────────────────────────────────────────
+    FRONTEND_URL: str = "http://localhost:3000"
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
 

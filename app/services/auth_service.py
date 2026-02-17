@@ -111,7 +111,11 @@ async def accept_invitation(
         )
 
     # Find or create user
-    user_stmt = select(User).where(User.email == invite.email)
+    user_stmt = (
+        select(User)
+        .options(selectinload(User.roles))
+        .where(User.email == invite.email)
+    )
     user_result = await db.execute(user_stmt)
     user = user_result.scalar_one_or_none()
 
@@ -124,6 +128,8 @@ async def accept_invitation(
             status=UserStatus.ACTIVE,
         )
         db.add(user)
+        await db.flush()
+        await db.refresh(user, ["roles"])
     else:
         user.password_hash = hash_password(password)
         user.full_name = full_name
@@ -133,10 +139,16 @@ async def accept_invitation(
     role_stmt = select(Role).where(Role.name == invite.role_assigned)
     role_result = await db.execute(role_stmt)
     role = role_result.scalar_one_or_none()
-    if role and role not in user.roles:
+    if role is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Assigned role does not exist",
+        )
+    if role not in user.roles:
         user.roles.append(role)
 
     invite.status = InvitationStatus.ACCEPTED
     await db.flush()
+    await db.refresh(user, ["roles"])
 
     return user
