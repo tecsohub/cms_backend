@@ -14,6 +14,9 @@ engine = create_async_engine(
     settings.DATABASE_URL,
     # echo=settings.DEBUG,
     future=True,
+    pool_pre_ping=True,  # auto-recycle stale connections
+    pool_size=20,
+    pool_recycle=1800,  # 30 minutes
 )
 
 async_session_factory = async_sessionmaker(

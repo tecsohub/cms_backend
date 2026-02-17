@@ -33,6 +33,7 @@ async def accept_invitation(
 ):
     """Accept a pending invitation, set password, activate account."""
     user = await auth_service.accept_invitation(
+        warehouse_id=body.warehouse_id,
         token=body.token,
         password=body.password,
         full_name=body.full_name,

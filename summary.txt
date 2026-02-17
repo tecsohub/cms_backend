@@ -1,0 +1,370 @@
+================================================================================
+                     CMS BACKEND — PROJECT SUMMARY
+================================================================================
+Project:    Cold-Storage Management System (CMS) — Backend API
+Stack:      Python 3.11+ · FastAPI · SQLAlchemy 2.0 (async) · PostgreSQL
+            Alembic (migrations) · Pydantic v2 · JWT Auth · bcrypt
+Started:    February 2026
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1.  PROJECT INITIALISATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+• Scaffolded a FastAPI project with uv as the package manager.
+• Defined pyproject.toml with core dependencies:
+    fastapi[standard], sqlalchemy, asyncpg, psycopg2-binary, alembic,
+    pydantic, pydantic-settings, python-jose, bcrypt, uvicorn,
+    python-multipart, aiosmtplib.
+• Created the application factory pattern in app/main.py using
+  FastAPI's lifespan context manager.
+• Set up environment-driven configuration via pydantic-settings
+  (app/core/config.py) loading from a .env file.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2.  DATABASE LAYER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+• Async engine (asyncpg) with connection pooling:
+    pool_size=20, pool_pre_ping=True, pool_recycle=1800.
+• Session factory (async_sessionmaker) with expire_on_commit=False
+  to avoid lazy-load issues in async context.
+• FastAPI dependency (get_db) that auto-commits on success and
+  rolls back on exception.
+• Alembic configured for async migrations (alembic/env.py) using
+  the same DATABASE_URL from settings.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3.  DATA MODELS (app/models/)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Shared mixins (base.py):
+    • UUIDPrimaryKeyMixin — UUID v4 primary key on every table.
+    • TimestampMixin — created_at / updated_at (UTC, auto-managed).
+
+Models created:
+    ┌──────────────────────┬────────────────────────────────────────────────┐
+    │ Model                │ Purpose                                        │
+    ├──────────────────────┼────────────────────────────────────────────────┤
+    │ User                 │ Core identity. Status enum: INVITED → ACTIVE  │
+    │                      │ → DISABLED. Role-neutral — role-specific data  │
+    │                      │ lives in profile tables.                       │
+    ├──────────────────────┼────────────────────────────────────────────────┤
+    │ Role                 │ Named groups of permissions. Many-to-many     │
+    │                      │ with User (user_roles) and Permission          │
+    │                      │ (role_permissions).                            │
+    ├──────────────────────┼────────────────────────────────────────────────┤
+    │ Permission           │ Immutable action codes (e.g. inventory.view). │
+    │                      │ Seeded at deploy time. Many-to-many with Role.│
+    ├──────────────────────┼────────────────────────────────────────────────┤
+    │ Invitation           │ Token-based invite. Status: PENDING →         │
+    │                      │ ACCEPTED / EXPIRED. 72-hour expiry.           │
+    ├──────────────────────┼────────────────────────────────────────────────┤
+    │ Warehouse            │ Cold-storage facility. Created by admins.     │
+    ├──────────────────────┼────────────────────────────────────────────────┤
+    │ OperatorProfile      │ 1:1 with User. Links operator to a warehouse │
+    │                      │ with shift times.                              │
+    ├──────────────────────┼────────────────────────────────────────────────┤
+    │ Client               │ 1:1 with User. Company name + billing info.  │
+    └──────────────────────┴────────────────────────────────────────────────┘
+
+Association tables:
+    • user_roles        (user_id, role_id)
+    • role_permissions  (role_id, permission_id)
+
+Initial Alembic migration: 7142304e8e20_initial_schema.py
+    Creates all 9 tables (including the 2 association tables) with
+    proper foreign keys, indexes, and cascading deletes.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+4.  AUTHENTICATION & SECURITY (app/core/security.py)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+• Password hashing with bcrypt (direct usage, no passlib).
+• JWT creation & verification using python-jose (HS256).
+• Token payload includes: user_id, role_ids, role_names,
+  and contextual IDs (warehouse_id / client_id when applicable).
+• OAuth2PasswordBearer scheme for token extraction.
+• get_current_user_token dependency for route injection.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+5.  RBAC SYSTEM (app/rbac/)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Permission Seed (permission_seed.py):
+    • 12 canonical permissions across inventory, billing, user
+      management, and warehouse domains.
+    • 5 default roles with governance-enforced separation:
+        ADMIN             — all permissions
+        OPERATOR          — inventory operations only
+        INVENTORY_MANAGER — inventory operations (no billing approval)
+        BILLING_MANAGER   — billing only (no inventory mutation)
+        CLIENT            — view-only (inventory + invoices)
+    • Idempotent seed function with early-exit guard when data
+      already exists.
+    • Decoupled from app startup — runs via CLI:
+        python -m app.rbac.permission_seed
+
+Dependency-based enforcement (dependencies.py):
+    • require_permission(*codes) — dependency factory class.
+    • Decodes JWT → loads User with roles+permissions (selectinload)
+      → checks required codes are a subset of granted codes.
+    • Returns 403 with intentionally vague message (prevents
+      permission enumeration).
+    • get_current_active_user — auth-only dependency (no authz).
+
+Context Resolver (context_resolver.py):
+    • DataScope dataclass — encapsulates is_admin, warehouse_id,
+      client_id, user_id, role_names.
+    • resolve_data_scope(user, db) — builds scope from user profile:
+        Admin → unrestricted
+        Operator/InventoryManager → locked to warehouse_id
+        Client → locked to client_id
+
+Decorators (decorators.py):
+    • Optional @permission_required() decorator as syntactic sugar
+      over Depends(require_permission()).
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+6.  API CONTROLLERS (app/controllers/)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Auth Controller (auth_controller.py) — prefix: /api/auth
+    POST /login              — email + password → JWT token
+    POST /accept-invitation  — token + password + name → activated user
+
+Admin Controller (admin_controller.py) — prefix: /api/admin
+    POST   /warehouses            — create warehouse
+    GET    /warehouses            — list warehouses (scope-filtered)
+    PATCH  /warehouses/{id}       — update warehouse
+    GET    /users                 — list users (scope-filtered)
+    POST   /users/{id}/disable    — disable a user account
+    POST   /invitations           — create & send invitation
+    GET    /invitations           — list all invitations
+
+Operator Controller (operator_controller.py) — prefix: /api/operator
+    GET    /my-warehouse          — operator's assigned warehouse
+    GET    /inventory             — inventory listing (stub)
+    POST   /inventory/inward      — create inward entry (stub)
+
+Client Controller (client_controller.py) — prefix: /api/client
+    GET    /me                    — client's own profile
+    GET    /inventory             — client's inventory (stub)
+    GET    /invoices              — client's invoices (stub)
+
+Health Check:
+    GET    /health                — returns {"status": "ok"}
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+7.  SERVICES (app/services/)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+auth_service.py
+    • authenticate_user() — validates credentials, builds JWT with
+      contextual IDs, returns token response.
+    • accept_invitation() — validates token, creates/activates user,
+      assigns role. Uses selectinload + explicit refresh to avoid
+      async lazy-load (MissingGreenlet) errors.
+
+invitation_service.py
+    • create_invitation() — enforces uniqueness (no active user, no
+      duplicate pending invite), generates secure token, creates DB
+      record, sends invitation email.
+    • list_invitations() — paginated listing.
+    • get_invitation_by_token() — lookup by token.
+
+user_service.py
+    • get_user_by_id() — eager-loaded user lookup.
+    • list_users() — scope-filtered: admin sees all, operator sees
+      warehouse peers, client sees only self.
+    • disable_user() — sets status to DISABLED.
+
+warehouse_service.py
+    • create_warehouse() — admin-only creation.
+    • list_warehouses() — scope-filtered listing.
+    • get_warehouse_by_id() — with scope enforcement.
+    • update_warehouse() — partial update (PATCH semantics).
+
+email_service.py
+    • send_email() — generic async SMTP sender via aiosmtplib
+      with STARTTLS (Gmail-compatible).
+    • send_invitation_email() — builds styled HTML email with
+      accept-invitation link pointing to FRONTEND_URL.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+8.  PYDANTIC SCHEMAS (app/schemas.py)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Request schemas:
+    LoginRequest, AcceptInvitationRequest, CreateInvitationRequest,
+    CreateWarehouseRequest, UpdateWarehouseRequest
+
+Response schemas:
+    TokenResponse, UserOut, InvitationOut, WarehouseOut,
+    OperatorProfileOut, ClientOut, MessageResponse
+
+All response schemas use from_attributes=True for ORM compatibility.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+9.  SCRIPTS (app/scripts/)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+create_admin.py
+    • Interactive CLI script to bootstrap the first admin user.
+    • Validates input, checks for duplicates, requires ADMIN role
+      to be seeded first.
+    • Run: uv run python -m app.scripts.create_admin
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+10. CONFIGURATION & ENVIRONMENT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Settings loaded from .env:
+    APP_NAME, DEBUG, DATABASE_URL, SECRET_KEY, JWT_ALGORITHM,
+    ACCESS_TOKEN_EXPIRE_MINUTES, EMAIL_HOST, EMAIL_PORT,
+    SENDER_EMAIL, EMAIL_PASSWORD, FRONTEND_URL, CORS_ORIGINS
+
+Derived property: SYNC_DATABASE_URL (for Alembic migrations).
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+11. BUGS FIXED DURING DEVELOPMENT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[BUG-1] MissingGreenlet on user.roles after accept_invitation
+    Cause:  After db.flush(), SQLAlchemy expired the user object.
+            Accessing user.roles in the controller triggered a
+            synchronous lazy load — impossible in async context.
+    Fix:    Added `await db.refresh(user, ["roles"])` after flush
+            in auth_service.accept_invitation().
+
+[BUG-2] MissingGreenlet on `role not in user.roles` for new users
+    Cause:  Newly created User objects have uninitialised roles
+            collection. Checking `role not in user.roles` triggered
+            a sync lazy load.
+    Fix:    (a) Eagerly load roles with selectinload when fetching
+            existing users. (b) For new users, flush + refresh
+            before the membership check.
+
+[BUG-3] Permission seed running on every app startup
+    Cause:  seed() was called inside the lifespan startup event,
+            executing multiple DB queries on every boot.
+    Fix:    (a) Added early-exit guard in seed() — checks if all
+            expected permissions and roles exist and returns
+            immediately if so. (b) Removed seed call from lifespan
+            entirely — seeding is now CLI-only:
+            python -m app.rbac.permission_seed
+
+[BUG-4] Verbose SQLAlchemy engine logging on every request
+    Cause:  Custom logging.basicConfig() was configured at module
+            level with DEBUG level.
+    Fix:    Removed the manual logging.basicConfig() call — Uvicorn's
+            built-in logger handles output.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+12. PERFORMANCE IMPROVEMENTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+• Database connection pooling: pool_size=20, pool_pre_ping=True,
+  pool_recycle=1800 — prevents stale connections and reduces
+  per-request overhead.
+
+• Identified email sending as the main bottleneck in invitation
+  creation (5–15s SMTP round-trip). Recommended moving to
+  BackgroundTasks for non-blocking email delivery.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+13. PROJECT STRUCTURE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+cms_backend/
+├── .env                          # Environment variables
+├── alembic.ini                   # Alembic config
+├── main.py                       # Uvicorn entrypoint
+├── pyproject.toml                # Dependencies & project metadata
+├── summary.txt                   # This file
+│
+├── alembic/
+│   ├── env.py                    # Async migration runner
+│   └── versions/
+│       └── 7142304e8e20_initial_schema.py
+│
+└── app/
+    ├── __init__.py
+    ├── main.py                   # FastAPI app factory
+    ├── schemas.py                # Pydantic request/response schemas
+    │
+    ├── controllers/
+    │   ├── admin_controller.py   # Warehouse, user, invitation routes
+    │   ├── auth_controller.py    # Login & accept-invitation routes
+    │   ├── client_controller.py  # Client-scoped routes
+    │   └── operator_controller.py# Operator-scoped routes
+    │
+    ├── core/
+    │   ├── config.py             # Pydantic Settings (env-driven)
+    │   ├── database.py           # Async engine & session factory
+    │   └── security.py           # bcrypt hashing, JWT helpers
+    │
+    ├── models/
+    │   ├── __init__.py           # Model registry
+    │   ├── base.py               # Declarative base + mixins
+    │   ├── client.py             # Client model
+    │   ├── invitation.py         # Invitation model
+    │   ├── operator_profile.py   # OperatorProfile model
+    │   ├── permission.py         # Permission model
+    │   ├── role.py               # Role model + association tables
+    │   ├── user.py               # User model
+    │   └── warehouse.py          # Warehouse model
+    │
+    ├── rbac/
+    │   ├── context_resolver.py   # DataScope builder
+    │   ├── decorators.py         # @permission_required decorator
+    │   ├── dependencies.py       # require_permission dependency
+    │   └── permission_seed.py    # Idempotent permission/role seeder
+    │
+    ├── scripts/
+    │   └── create_admin.py       # First admin bootstrap script
+    │
+    └── services/
+        ├── auth_service.py       # Login & invitation acceptance
+        ├── email_service.py      # Async SMTP email sender
+        ├── invitation_service.py # Invitation CRUD + email trigger
+        ├── user_service.py       # User CRUD (scope-filtered)
+        └── warehouse_service.py  # Warehouse CRUD (scope-filtered)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+14. HOW TO RUN
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# 1. Install dependencies
+uv sync
+
+# 2. Run database migrations
+uv run alembic upgrade head
+
+# 3. Seed permissions & roles (once)
+uv run python -m app.rbac.permission_seed
+
+# 4. Create the first admin user (once)
+uv run python -m app.scripts.create_admin
+
+# 5. Start the dev server
+uv run fastapi dev
+
+# API docs available at:
+#   http://127.0.0.1:8000/docs    (Swagger UI)
+#   http://127.0.0.1:8000/redoc   (ReDoc)
+
+================================================================================

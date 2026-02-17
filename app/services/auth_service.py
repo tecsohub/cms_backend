@@ -83,6 +83,7 @@ async def accept_invitation(
     token: str,
     password: str,
     full_name: str,
+    warehouse_id: uuid.UUID | None,
     db: AsyncSession,
 ) -> User:
     """
@@ -146,6 +147,14 @@ async def accept_invitation(
         )
     if role not in user.roles:
         user.roles.append(role)
+
+    if role.name == "OPERATOR":
+        # For operator invites, we also need to set the warehouse_id in the JWT payload.
+        # This is a bit of a special case since we have a separate OperatorProfile
+        # table. The warehouse_id will be selected by operator while accepting the invite, so we create the OperatorProfile here with a null warehouse_id, and update it later when the operator selects their warehouse.
+        from app.models.operator_profile import OperatorProfile
+        profile = OperatorProfile(user_id=user.id, warehouse_id=warehouse_id)
+        db.add(profile)
 
     invite.status = InvitationStatus.ACCEPTED
     await db.flush()

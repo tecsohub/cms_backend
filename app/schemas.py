@@ -27,6 +27,7 @@ class TokenResponse(BaseModel):
 
 
 class AcceptInvitationRequest(BaseModel):
+    warehouse_id: str
     token: str
     password: str = Field(min_length=8)
     full_name: str
