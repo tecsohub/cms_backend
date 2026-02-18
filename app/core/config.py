@@ -34,7 +34,8 @@ class Settings(BaseSettings):
     EMAIL_PORT: int = 587
     SENDER_EMAIL: str = ""
     EMAIL_PASSWORD: str = ""
-
+    # ── CORS ─────────────────────────────────────────────────────
+    CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:5173"]
     # ── Frontend ─────────────────────────────────────────────────────
     FRONTEND_URL: str = "http://localhost:3000"
 

@@ -5,12 +5,15 @@ These routes are PUBLIC (no permission dependency) because the user
 hasn't authenticated yet.
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.schemas import (
     AcceptInvitationRequest,
+    AcceptInvitationRequestOperator,
+    InvitationOut,
+    InvitationOutOperator,
     LoginRequest,
     TokenResponse,
     UserOut,
@@ -28,7 +31,7 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
 
 @router.post("/accept-invitation", response_model=UserOut)
 async def accept_invitation(
-    body: AcceptInvitationRequest,
+    body: AcceptInvitationRequest | AcceptInvitationRequestOperator,
     db: AsyncSession = Depends(get_db),
 ):
     """Accept a pending invitation, set password, activate account."""
@@ -38,6 +41,8 @@ async def accept_invitation(
         password=body.password,
         full_name=body.full_name,
         db=db,
+        shift_start=getattr(body, "shift_start", None),
+        shift_end=getattr(body, "shift_end", None),
     )
     return UserOut(
         id=user.id,
@@ -48,4 +53,26 @@ async def accept_invitation(
         status=user.status.value,
         roles=[r.name for r in user.roles],
         created_at=user.created_at,
+    )
+
+@router.get("/accept-invitation", response_model=InvitationOutOperator)
+async def get_invitation(
+    token: str,
+    db: AsyncSession = Depends(get_db),
+) -> InvitationOutOperator:
+    """Fetch invitation details for a given token (used by frontend to validate token before showing form)."""
+    invite = await auth_service.get_invitation_by_token(token, db)
+    if not invite:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found or already accepted")
+
+    warehouses = await auth_service.get_all_warehouses(db)
+    return InvitationOutOperator(
+        id=invite.id,
+        email=invite.email,
+        role_assigned=invite.role_assigned,
+        token=invite.token,
+        status=invite.status.value,
+        warehouses=warehouses,
+        expires_at=invite.expires_at,
+        created_at=invite.created_at
     )

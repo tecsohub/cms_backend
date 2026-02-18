@@ -11,7 +11,7 @@ and return the result.
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, time, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -20,8 +20,10 @@ from sqlalchemy.orm import selectinload
 
 from app.core.security import create_access_token, hash_password, verify_password
 from app.models.invitation import Invitation, InvitationStatus
+from app.models.operator_profile import OperatorProfile
 from app.models.role import Role
 from app.models.user import User, UserStatus
+from app.models.warehouse import Warehouse
 
 
 async def authenticate_user(email: str, password: str, db: AsyncSession) -> dict:
@@ -84,6 +86,8 @@ async def accept_invitation(
     password: str,
     full_name: str,
     warehouse_id: uuid.UUID | None,
+    shift_start: time | None,
+    shift_end: time | None,
     db: AsyncSession,
 ) -> User:
     """
@@ -148,16 +152,34 @@ async def accept_invitation(
     if role not in user.roles:
         user.roles.append(role)
 
+    # Create a new operator profile if the role is OPERATOR
     if role.name == "OPERATOR":
-        # For operator invites, we also need to set the warehouse_id in the JWT payload.
-        # This is a bit of a special case since we have a separate OperatorProfile
-        # table. The warehouse_id will be selected by operator while accepting the invite, so we create the OperatorProfile here with a null warehouse_id, and update it later when the operator selects their warehouse.
-        from app.models.operator_profile import OperatorProfile
-        profile = OperatorProfile(user_id=user.id, warehouse_id=warehouse_id)
-        db.add(profile)
+        if warehouse_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Warehouse ID is required for OPERATOR role",
+            )
+        operator_profile = OperatorProfile(
+            id=uuid.uuid4(),
+            user_id=user.id,
+            warehouse_id=warehouse_id,
+            shift_start=shift_start,
+            shift_end=shift_end,
+        )
+        db.add(operator_profile)
 
     invite.status = InvitationStatus.ACCEPTED
     await db.flush()
     await db.refresh(user, ["roles"])
 
     return user
+
+async def get_invitation_by_token(token: str, db: AsyncSession) -> Invitation | None:
+    stmt = select(Invitation).where(Invitation.token == token)
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
+
+async def get_all_warehouses(db: AsyncSession) -> list[Warehouse]:
+    stmt = select(Warehouse)
+    result = await db.execute(stmt)
+    return result.scalars().all()

@@ -8,6 +8,7 @@ events.  Database schema is managed by Alembic — NOT create_all.
 import logging
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.controllers.admin_controller import router as admin_router
 from app.controllers.auth_controller import router as auth_router
@@ -40,6 +41,15 @@ def create_app() -> FastAPI:
         docs_url="/docs",
         redoc_url="/redoc",
         lifespan=lifespan,
+    )
+
+    # ── CORS ──────────────────────────────────────────────────────────
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.CORS_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
 
     # ── Register routers ─────────────────────────────────────────────

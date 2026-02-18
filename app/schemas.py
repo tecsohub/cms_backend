@@ -27,7 +27,6 @@ class TokenResponse(BaseModel):
 
 
 class AcceptInvitationRequest(BaseModel):
-    warehouse_id: str
     token: str
     password: str = Field(min_length=8)
     full_name: str
@@ -97,6 +96,26 @@ class OperatorProfileOut(BaseModel):
 
     model_config = {"from_attributes": True}
 
+class InvitationOutOperator(BaseModel):
+    id: uuid.UUID
+    email: str
+    role_assigned: str
+    token: str
+    status: str
+    expires_at: datetime
+    created_at: datetime
+    warehouses: list[WarehouseOut]
+
+    model_config = {"from_attributes": True}
+
+
+class AcceptInvitationRequestOperator(BaseModel):
+    token: str
+    password: str = Field(min_length=8)
+    full_name: str
+    warehouse_id: uuid.UUID
+    shift_start: time | None = None
+    shift_end: time | None = None
 
 # ── Client ───────────────────────────────────────────────────────────
 class ClientOut(BaseModel):
