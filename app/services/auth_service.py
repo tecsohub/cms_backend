@@ -160,7 +160,6 @@ async def accept_invitation(
                 detail="Warehouse ID is required for OPERATOR role",
             )
         operator_profile = OperatorProfile(
-            id=uuid.uuid4(),
             user_id=user.id,
             warehouse_id=warehouse_id,
             shift_start=shift_start,

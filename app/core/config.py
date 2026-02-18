@@ -35,9 +35,10 @@ class Settings(BaseSettings):
     SENDER_EMAIL: str = ""
     EMAIL_PASSWORD: str = ""
     # ── CORS ─────────────────────────────────────────────────────
-    CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:5173"]
+    # CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:5173"]
     # ── Frontend ─────────────────────────────────────────────────────
     FRONTEND_URL: str = "http://localhost:3000"
+    EMAIL_ACTIVATION_URL: str = "http://localhost:3000"
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

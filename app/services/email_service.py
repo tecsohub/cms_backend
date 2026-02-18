@@ -49,7 +49,7 @@ async def send_invitation_email(
     The link points to the frontend, which will call the
     POST /api/auth/accept-invitation endpoint.
     """
-    invite_link = f"{settings.FRONTEND_URL}/accept-invitation?token={invitation_token}"
+    invite_link = f"{settings.EMAIL_ACTIVATION_URL}/?token={invitation_token}"
 
     subject = f"You've been invited to {settings.APP_NAME}"
     html_body = f"""\
