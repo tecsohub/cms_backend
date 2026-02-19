@@ -1,32 +1,60 @@
 """
-Auth controller — login & invitation acceptance.
+Auth controller — login, logout, token refresh & invitation acceptance.
 
-These routes are PUBLIC (no permission dependency) because the user
-hasn't authenticated yet.
+Login and invitation routes are PUBLIC (no permission dependency).
+Logout requires a valid session.
 """
+
+import uuid
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.security import get_current_user_token
 from app.schemas import (
     AcceptInvitationRequest,
     AcceptInvitationRequestOperator,
     InvitationOut,
     InvitationOutOperator,
     LoginRequest,
+    MessageResponse,
+    RefreshTokenRequest,
     TokenResponse,
     UserOut,
 )
-from app.services import auth_service
+from app.services import auth_service, session_service
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
 
 @router.post("/login", response_model=TokenResponse)
 async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
-    """Authenticate with email + password → receive JWT."""
-    return await auth_service.authenticate_user(body.email, body.password, db)
+    """Authenticate with email + password + device_id → receive JWT pair."""
+    return await auth_service.authenticate_user(
+        body.email, body.password, body.device_id, db,
+    )
+
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh_token(
+    body: RefreshTokenRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Exchange a valid refresh token for a new access + refresh pair."""
+    return await auth_service.refresh_access_token(body.refresh_token, db)
+
+
+@router.delete("/logout", response_model=MessageResponse)
+async def logout(
+    token_payload: dict[str, Any] = Depends(get_current_user_token),
+    db: AsyncSession = Depends(get_db),
+):
+    """Deactivate the current session (server-side logout)."""
+    session_id = token_payload["session_id"]
+    await session_service.deactivate_session(uuid.UUID(session_id), db)
+    return MessageResponse(detail="Logged out successfully")
 
 
 @router.post("/accept-invitation", response_model=UserOut)

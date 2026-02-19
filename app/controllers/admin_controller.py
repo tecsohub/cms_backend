@@ -28,7 +28,7 @@ from app.schemas import (
     UserOut,
     WarehouseOut,
 )
-from app.services import invitation_service, user_service, warehouse_service
+from app.services import invitation_service, session_service, user_service, warehouse_service
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
 
@@ -115,6 +115,17 @@ async def disable_user(
 ):
     await user_service.disable_user(user_id, db)
     return MessageResponse(detail="User disabled successfully")
+
+
+@router.post("/users/{user_id}/force-logout", response_model=MessageResponse)
+async def force_logout_user(
+    user_id: uuid.UUID,
+    user: User = Depends(require_permission("user.invite.operator")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Deactivate all active sessions for a given user (admin action)."""
+    count = await session_service.deactivate_all_user_sessions(user_id, db)
+    return MessageResponse(detail=f"Deactivated {count} session(s)")
 
 
 # ── Invitations ──────────────────────────────────────────────────────

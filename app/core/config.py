@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "CHANGE-ME-in-production-use-a-real-secret"
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+
+    # ── Session ──────────────────────────────────────────────────────
+    SESSION_INACTIVITY_TIMEOUT_MINUTES: int = 1440  # 24 hours
 
     # ── Email / SMTP ─────────────────────────────────────────────────
     EMAIL_HOST: str = "smtp.gmail.com"

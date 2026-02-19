@@ -11,6 +11,7 @@ from app.models.warehouse import Warehouse
 from app.models.operator_profile import OperatorProfile
 from app.models.client import Client
 from app.models.invitation import Invitation, InvitationStatus
+from app.models.session import UserSession
 
 __all__ = [
     "Base",
@@ -27,4 +28,5 @@ __all__ = [
     "Client",
     "Invitation",
     "InvitationStatus",
+    "UserSession",
 ]

@@ -84,8 +84,12 @@ async def disable_user(
     target_user_id: uuid.UUID,
     db: AsyncSession,
 ) -> User:
-    """Admin action — disable a user account."""
+    """Admin action — disable a user account and invalidate all sessions."""
+    from app.services import session_service
+
     user = await get_user_by_id(target_user_id, db)
     user.status = UserStatus.DISABLED
+    # Immediately invalidate every active session for this user
+    await session_service.deactivate_all_user_sessions(target_user_id, db)
     await db.flush()
     return user
