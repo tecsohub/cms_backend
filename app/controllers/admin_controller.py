@@ -113,7 +113,7 @@ async def disable_user(
     user: User = Depends(require_permission("user.invite.operator")),
     db: AsyncSession = Depends(get_db),
 ):
-    await user_service.disable_user(user_id, db)
+    await user_service.disable_user(user_id, db, performed_by=user.id)
     return MessageResponse(detail="User disabled successfully")
 
 

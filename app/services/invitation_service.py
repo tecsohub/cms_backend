@@ -16,6 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.invitation import Invitation, InvitationStatus
 from app.models.user import User
+from app.services import audit_service
+from app.services.audit_serializer import to_audit_dict
 from app.services.email_service import send_invitation_email
 
 
@@ -76,6 +78,16 @@ async def create_invitation(
     )
     db.add(invitation)
     await db.flush()
+
+    await audit_service.log(
+        db,
+        entity_type="Invitation",
+        entity_id=invitation.id,
+        action="CREATE",
+        performed_by=invited_by,
+        old_data=None,
+        new_data=to_audit_dict(invitation),
+    )
 
     # Send invitation email
     await send_invitation_email(

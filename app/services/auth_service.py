@@ -41,7 +41,8 @@ from app.models.role import Role
 from app.models.session import UserSession
 from app.models.user import User, UserStatus
 from app.models.warehouse import Warehouse
-from app.services import session_service
+from app.services import audit_service, session_service
+from app.services.audit_serializer import to_audit_dict
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -324,6 +325,16 @@ async def accept_invitation(
         db.add(user)
         await db.flush()
         await db.refresh(user, ["roles"])
+
+        await audit_service.log(
+            db,
+            entity_type="User",
+            entity_id=user.id,
+            action="CREATE",
+            performed_by=user.id,
+            old_data=None,
+            new_data=to_audit_dict(user),
+        )
     else:
         user.password_hash = hash_password(password)
         user.full_name = full_name
@@ -359,6 +370,18 @@ async def accept_invitation(
     invite.status = InvitationStatus.ACCEPTED
     await db.flush()
     await db.refresh(user, ["roles"])
+
+    # Audit: role assignment
+    await audit_service.log(
+        db,
+        entity_type="UserRole",
+        entity_id=user.id,
+        action="UPDATE",
+        performed_by=user.id,
+        old_data=None,
+        new_data={"user_id": str(user.id), "role": role.name},
+        reason=f"Role '{role.name}' assigned via invitation acceptance",
+    )
 
     return user
 

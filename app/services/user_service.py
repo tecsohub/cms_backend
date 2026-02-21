@@ -15,6 +15,8 @@ from sqlalchemy.orm import selectinload
 
 from app.models.user import User, UserStatus
 from app.rbac.context_resolver import DataScope
+from app.services import audit_service
+from app.services.audit_serializer import to_audit_dict
 
 
 async def get_user_by_id(
@@ -83,13 +85,27 @@ async def list_users(
 async def disable_user(
     target_user_id: uuid.UUID,
     db: AsyncSession,
+    performed_by: uuid.UUID | None = None,
 ) -> User:
     """Admin action — disable a user account and invalidate all sessions."""
     from app.services import session_service
 
     user = await get_user_by_id(target_user_id, db)
+    old_snapshot = to_audit_dict(user)
+
     user.status = UserStatus.DISABLED
     # Immediately invalidate every active session for this user
     await session_service.deactivate_all_user_sessions(target_user_id, db)
     await db.flush()
+
+    await audit_service.log(
+        db,
+        entity_type="User",
+        entity_id=user.id,
+        action="DISABLE",
+        performed_by=performed_by or user.id,
+        old_data=old_snapshot,
+        new_data=to_audit_dict(user),
+    )
+
     return user

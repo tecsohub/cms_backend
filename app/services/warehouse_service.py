@@ -15,6 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.warehouse import Warehouse
 from app.rbac.context_resolver import DataScope
+from app.services import audit_service
+from app.services.audit_serializer import to_audit_dict
 
 
 async def create_warehouse(
@@ -34,6 +36,17 @@ async def create_warehouse(
     )
     db.add(warehouse)
     await db.flush()
+
+    await audit_service.log(
+        db,
+        entity_type="Warehouse",
+        entity_id=warehouse.id,
+        action="CREATE",
+        performed_by=admin_id,
+        old_data=None,
+        new_data=to_audit_dict(warehouse),
+    )
+
     return warehouse
 
 
@@ -92,6 +105,8 @@ async def update_warehouse(
 ) -> Warehouse:
     """Update warehouse details (admin only — enforced at controller)."""
     wh = await get_warehouse_by_id(warehouse_id, db, scope)
+    old_snapshot = to_audit_dict(wh)
+
     if name is not None:
         wh.name = name
     if address is not None:
@@ -99,4 +114,15 @@ async def update_warehouse(
     if capacity is not None:
         wh.capacity = capacity
     await db.flush()
+
+    await audit_service.log(
+        db,
+        entity_type="Warehouse",
+        entity_id=wh.id,
+        action="UPDATE",
+        performed_by=scope.user_id,
+        old_data=old_snapshot,
+        new_data=to_audit_dict(wh),
+    )
+
     return wh

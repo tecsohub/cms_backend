@@ -12,6 +12,9 @@ from app.models.operator_profile import OperatorProfile
 from app.models.client import Client
 from app.models.invitation import Invitation, InvitationStatus
 from app.models.session import UserSession
+from app.models.enums import MovementType, AuditAction
+from app.models.inventory_ledger import InventoryLedger
+from app.models.audit_log import AuditLog
 
 __all__ = [
     "Base",
@@ -29,4 +32,8 @@ __all__ = [
     "Invitation",
     "InvitationStatus",
     "UserSession",
+    "MovementType",
+    "AuditAction",
+    "InventoryLedger",
+    "AuditLog",
 ]
