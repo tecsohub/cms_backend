@@ -144,6 +144,48 @@ class ClientOut(BaseModel):
 
     model_config = {"from_attributes": True}
 
+# ── Product / Pallet Intake ──────────────────────────────────────────
+class ProductCreateRequest(BaseModel):
+    """Operator submits product details during warehouse intake."""
+    name: str = Field(min_length=1, max_length=256)
+    description: str | None = None
+    category: str = Field(description="One of: FROZEN, CHILLED, DRY, PHARMA, OTHER")
+    unit: str = Field(description="One of: KG, TON, BOX, PALLET, LITRE, UNIT")
+    quantity: float = Field(gt=0)
+    lot_number: str = Field(min_length=1, max_length=128, description="Lot/batch number for the pallet")
+    temperature_requirement: float | None = None
+
+
+class ProductLinkClientRequest(BaseModel):
+    """After product creation, operator provides client email."""
+    email: EmailStr
+
+
+class ProductOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    description: str | None = None
+    category: str
+    unit: str
+    quantity: float
+    lot_number: str
+    temperature_requirement: float | None = None
+    sku_code: str
+    warehouse_id: uuid.UUID
+    client_id: uuid.UUID | None = None
+    client_email: str | None = None
+    created_by: uuid.UUID
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class LinkClientResponse(BaseModel):
+    detail: str
+    client_linked: bool
+    invitation_sent: bool
+    product_id: uuid.UUID
+    client_email: str
 
 # ── Generic ──────────────────────────────────────────────────────────
 class MessageResponse(BaseModel):

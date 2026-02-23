@@ -43,6 +43,7 @@ from app.models.user import User, UserStatus
 from app.models.warehouse import Warehouse
 from app.services import audit_service, session_service
 from app.services.audit_serializer import to_audit_dict
+from app.services import product_service
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -366,6 +367,32 @@ async def accept_invitation(
             shift_end=shift_end,
         )
         db.add(operator_profile)
+
+    # Create a client profile if the role is CLIENT
+    if role.name == "CLIENT":
+        from app.models.client import Client
+
+        existing_client = (
+            await db.execute(select(Client).where(Client.user_id == user.id))
+        ).scalar_one_or_none()
+
+        if existing_client is None:
+            client = Client(
+                id=uuid.uuid4(),
+                user_id=user.id,
+                company_name=full_name,  # default to user's name
+                created_by_admin_id=invite.invited_by,
+            )
+            db.add(client)
+            await db.flush()
+
+            # Back-fill client_id on any products awaiting this email
+            await product_service.backfill_client_on_products(
+                client_id=client.id,
+                client_email=invite.email,
+                performed_by=user.id,
+                db=db,
+            )
 
     invite.status = InvitationStatus.ACCEPTED
     await db.flush()

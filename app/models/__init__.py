@@ -13,6 +13,7 @@ from app.models.client import Client
 from app.models.invitation import Invitation, InvitationStatus
 from app.models.session import UserSession
 from app.models.enums import MovementType, AuditAction
+from app.models.product import Product, ProductCategory, StorageUnit
 from app.models.inventory_ledger import InventoryLedger
 from app.models.audit_log import AuditLog
 
@@ -34,6 +35,9 @@ __all__ = [
     "UserSession",
     "MovementType",
     "AuditAction",
+    "Product",
+    "ProductCategory",
+    "StorageUnit",
     "InventoryLedger",
     "AuditLog",
 ]
