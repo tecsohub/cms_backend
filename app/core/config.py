@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     # ── Session ──────────────────────────────────────────────────────
     SESSION_INACTIVITY_TIMEOUT_MINUTES: int = 1440  # 24 hours
 
+    # ── Password Reset OTP ────────────────────────────────────────────
+    OTP_EXPIRE_MINUTES: int = 60
+    OTP_MAX_DAILY_REQUESTS: int = 5
+
     # ── Email / SMTP ─────────────────────────────────────────────────
     EMAIL_HOST: str = "smtp.gmail.com"
     EMAIL_PORT: int = 587

@@ -16,6 +16,7 @@ from app.models.enums import MovementType, AuditAction
 from app.models.product import Product, ProductCategory, StorageUnit
 from app.models.inventory_ledger import InventoryLedger
 from app.models.audit_log import AuditLog
+from app.models.password_reset_otp import PasswordResetOTP
 
 __all__ = [
     "Base",
@@ -40,4 +41,5 @@ __all__ = [
     "StorageUnit",
     "InventoryLedger",
     "AuditLog",
+    "PasswordResetOTP",
 ]

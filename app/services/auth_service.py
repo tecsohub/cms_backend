@@ -7,6 +7,8 @@ Handles:
 - Token payload construction (includes role, session_id, device_id,
   and contextual IDs for backward-compat RBAC)
 - Invitation acceptance (set password, activate account)
+- Forgot-password (OTP email flow)
+- Change-password (authenticated)
 
 Concurrency rules:
 - Operator: one active device at a time (same device → reuse session,
@@ -17,12 +19,14 @@ All business logic lives here — controllers call service methods
 and return the result.
 """
 
+import hashlib
+import random
 import uuid
-from datetime import datetime, time, timezone
+from datetime import datetime, time, timedelta, timezone
 
 from fastapi import HTTPException, status
 from jose import JWTError, jwt
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -37,6 +41,7 @@ from app.core.security import (
 )
 from app.models.invitation import Invitation, InvitationStatus
 from app.models.operator_profile import OperatorProfile
+from app.models.password_reset_otp import PasswordResetOTP
 from app.models.role import Role
 from app.models.session import UserSession
 from app.models.user import User, UserStatus
@@ -421,3 +426,213 @@ async def get_all_warehouses(db: AsyncSession) -> list[Warehouse]:
     stmt = select(Warehouse)
     result = await db.execute(stmt)
     return result.scalars().all()
+
+
+# ── Forgot Password (OTP) ───────────────────────────────────────────
+
+
+def _generate_otp(length: int = 6) -> str:
+    """Return a cryptographically-acceptable numeric OTP string."""
+    return "".join(str(random.SystemRandom().randint(0, 9)) for _ in range(length))
+
+
+def _hash_otp(otp: str) -> str:
+    """SHA-256 hash the OTP before persisting."""
+    return hashlib.sha256(otp.encode("utf-8")).hexdigest()
+
+
+async def request_password_reset(email: str, db: AsyncSession) -> dict:
+    """
+    Generate a 6-digit OTP and email it.
+
+    Rules:
+    - Always returns a generic success message (prevents user enumeration).
+    - Rate limited to OTP_MAX_DAILY_REQUESTS per email per UTC day.
+    - Only active users receive the OTP; silent no-op otherwise.
+    """
+    from app.services.email_service import send_password_reset_otp_email
+
+    # Always return generic message regardless of outcome
+    generic_response = {
+        "detail": "If the email is registered, a password reset code has been sent."
+    }
+
+    # Look up user
+    stmt = select(User).where(User.email == email)
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+
+    if user is None or user.status != UserStatus.ACTIVE:
+        return generic_response
+
+    # ── Rate limit: max N requests per UTC day ───────────────────────
+    today_start = datetime.now(timezone.utc).replace(
+        hour=0, minute=0, second=0, microsecond=0,
+    )
+    count_stmt = (
+        select(func.count())
+        .select_from(PasswordResetOTP)
+        .where(
+            PasswordResetOTP.email == email,
+            PasswordResetOTP.created_at >= today_start,
+        )
+    )
+    daily_count = (await db.execute(count_stmt)).scalar() or 0
+
+    if daily_count >= settings.OTP_MAX_DAILY_REQUESTS:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many password reset requests today. Please try again tomorrow.",
+        )
+
+    # ── Invalidate any existing unused OTPs for this user ────────────
+    prev_stmt = (
+        select(PasswordResetOTP)
+        .where(
+            PasswordResetOTP.user_id == user.id,
+            PasswordResetOTP.is_used == False,  # noqa: E712
+        )
+    )
+    prev_result = await db.execute(prev_stmt)
+    for old_otp in prev_result.scalars():
+        old_otp.is_used = True
+
+    # ── Create new OTP ───────────────────────────────────────────────
+    otp_plain = _generate_otp()
+    otp_record = PasswordResetOTP(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        email=email,
+        otp_hash=_hash_otp(otp_plain),
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=settings.OTP_EXPIRE_MINUTES),
+    )
+    db.add(otp_record)
+    await db.flush()
+
+    # ── Send email ───────────────────────────────────────────────────
+    await send_password_reset_otp_email(email, otp_plain)
+
+    return generic_response
+
+
+async def reset_password_with_otp(
+    email: str,
+    otp: str,
+    new_password: str,
+    db: AsyncSession,
+) -> dict:
+    """
+    Validate the OTP and set the new password.
+
+    After success:
+    - OTP is marked used.
+    - All active sessions are revoked (forces re-login everywhere).
+    - Audit log entry is created.
+    """
+    # Find the latest unused, non-expired OTP for this email
+    stmt = (
+        select(PasswordResetOTP)
+        .where(
+            PasswordResetOTP.email == email,
+            PasswordResetOTP.is_used == False,  # noqa: E712
+            PasswordResetOTP.expires_at > datetime.now(timezone.utc),
+        )
+        .order_by(PasswordResetOTP.created_at.desc())
+        .limit(1)
+    )
+    result = await db.execute(stmt)
+    otp_record = result.scalar_one_or_none()
+
+    if otp_record is None or otp_record.otp_hash != _hash_otp(otp):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired OTP.",
+        )
+
+    # ── Load user ────────────────────────────────────────────────────
+    user_stmt = select(User).where(User.id == otp_record.user_id)
+    user = (await db.execute(user_stmt)).scalar_one_or_none()
+    if user is None or user.status != UserStatus.ACTIVE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired OTP.",
+        )
+
+    # ── Update password ──────────────────────────────────────────────
+    user.password_hash = hash_password(new_password)
+    otp_record.is_used = True
+
+    # ── Revoke all sessions ──────────────────────────────────────────
+    revoked = await session_service.deactivate_all_user_sessions(user.id, db)
+
+    # ── Audit ────────────────────────────────────────────────────────
+    await audit_service.log(
+        db,
+        entity_type="User",
+        entity_id=user.id,
+        action="PASSWORD_RESET",
+        performed_by=user.id,
+        old_data=None,
+        new_data={"sessions_revoked": revoked},
+        reason="Password reset via OTP",
+    )
+
+    await db.flush()
+    return {"detail": "Password has been reset successfully. Please log in again."}
+
+
+async def change_password(
+    user_id: uuid.UUID,
+    current_password: str,
+    new_password: str,
+    db: AsyncSession,
+) -> dict:
+    """
+    Authenticated password change.
+
+    - Validates the current password.
+    - Sets the new password.
+    - Revokes all active sessions (forces re-login everywhere).
+    - Audit-logged.
+    """
+    user_stmt = select(User).where(User.id == user_id)
+    user = (await db.execute(user_stmt)).scalar_one_or_none()
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found.",
+        )
+
+    if not verify_password(current_password, user.password_hash or ""):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect.",
+        )
+
+    if current_password == new_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must be different from the current password.",
+        )
+
+    # ── Update password ──────────────────────────────────────────────
+    user.password_hash = hash_password(new_password)
+
+    # ── Revoke all sessions ──────────────────────────────────────────
+    revoked = await session_service.deactivate_all_user_sessions(user.id, db)
+
+    # ── Audit ────────────────────────────────────────────────────────
+    await audit_service.log(
+        db,
+        entity_type="User",
+        entity_id=user.id,
+        action="PASSWORD_CHANGE",
+        performed_by=user.id,
+        old_data=None,
+        new_data={"sessions_revoked": revoked},
+        reason="User changed password",
+    )
+
+    await db.flush()
+    return {"detail": "Password changed successfully. Please log in again."}
