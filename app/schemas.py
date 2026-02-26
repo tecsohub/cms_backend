@@ -154,6 +154,7 @@ class ProductCreateRequest(BaseModel):
     quantity: float = Field(gt=0)
     lot_number: str = Field(min_length=1, max_length=128, description="Lot/batch number for the pallet")
     temperature_requirement: float | None = None
+    rack_id: uuid.UUID = Field(description="Rack to allocate this product/pallet to")
 
 
 class ProductLinkClientRequest(BaseModel):
@@ -204,6 +205,56 @@ class ChangePasswordRequest(BaseModel):
     """Authenticated user changes their own password."""
     current_password: str
     new_password: str = Field(min_length=8)
+
+
+# ── Room ─────────────────────────────────────────────────────────────
+class CreateRoomRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=256)
+    warehouse_id: uuid.UUID
+    temperature_zone: float | None = None
+
+
+class RoomOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    warehouse_id: uuid.UUID
+    temperature_zone: float | None = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ── Rack ─────────────────────────────────────────────────────────────
+class CreateRackRequest(BaseModel):
+    label: str = Field(min_length=1, max_length=128)
+    room_id: uuid.UUID
+    capacity: float = Field(gt=0)
+    temperature: float | None = None
+
+
+class RackOut(BaseModel):
+    id: uuid.UUID
+    label: str
+    room_id: uuid.UUID
+    capacity: float
+    temperature: float | None = None
+    is_occupied: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ── Rack Allocation ──────────────────────────────────────────────────
+class RackAllocationOut(BaseModel):
+    id: uuid.UUID
+    rack_id: uuid.UUID
+    sku_id: uuid.UUID
+    allocated_by: uuid.UUID | None = None
+    allocated_at: datetime
+    released_at: datetime | None = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
 
 
 # ── Generic ──────────────────────────────────────────────────────────
