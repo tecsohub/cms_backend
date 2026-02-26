@@ -16,11 +16,14 @@ from app.core.security import get_current_user_token
 from app.schemas import (
     AcceptInvitationRequest,
     AcceptInvitationRequestOperator,
+    ChangePasswordRequest,
+    ForgotPasswordRequest,
     InvitationOut,
     InvitationOutOperator,
     LoginRequest,
     MessageResponse,
     RefreshTokenRequest,
+    ResetPasswordRequest,
     TokenResponse,
     UserOut,
 )
@@ -104,3 +107,60 @@ async def get_invitation(
         expires_at=invite.expires_at,
         created_at=invite.created_at
     )
+
+
+# ── Forgot / Reset Password ─────────────────────────────────────────
+
+
+@router.post("/forgot-password", response_model=MessageResponse)
+async def forgot_password(
+    body: ForgotPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Request a 6-digit OTP to reset the account password.
+
+    Always returns a generic success message regardless of whether
+    the email exists (prevents user enumeration).
+    Rate-limited to 5 requests per day per email.
+    """
+    result = await auth_service.request_password_reset(body.email, db)
+    return MessageResponse(detail=result["detail"])
+
+
+@router.post("/reset-password", response_model=MessageResponse)
+async def reset_password(
+    body: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Verify the OTP and set a new password.
+
+    Revokes all active sessions on success (forces re-login).
+    """
+    result = await auth_service.reset_password_with_otp(
+        body.email, body.otp, body.new_password, db,
+    )
+    return MessageResponse(detail=result["detail"])
+
+
+# ── Change Password (authenticated) ─────────────────────────────────
+
+
+@router.post("/change-password", response_model=MessageResponse)
+async def change_password(
+    body: ChangePasswordRequest,
+    token_payload: dict[str, Any] = Depends(get_current_user_token),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Change the current user's password (requires valid session).
+
+    The caller must supply the current password for verification.
+    Revokes all active sessions on success (forces re-login).
+    """
+    user_id = uuid.UUID(token_payload["sub"])
+    result = await auth_service.change_password(
+        user_id, body.current_password, body.new_password, db,
+    )
+    return MessageResponse(detail=result["detail"])

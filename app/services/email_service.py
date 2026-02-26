@@ -38,6 +38,45 @@ async def send_email(to: str, subject: str, html_body: str) -> None:
         raise
 
 
+async def send_password_reset_otp_email(
+    to_email: str,
+    otp: str,
+) -> None:
+    """
+    Send a password-reset OTP email.
+
+    The email contains a 6-digit numeric code that expires
+    according to the OTP_EXPIRE_MINUTES setting.
+    """
+    from app.core.config import settings as _settings
+
+    subject = f"{_settings.APP_NAME} — Password Reset Code"
+    html_body = f"""\
+    <html>
+    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+            <h2 style="color: #2c3e50;">Password Reset</h2>
+            <p>You requested a password reset for your
+               <strong>{_settings.APP_NAME}</strong> account.</p>
+            <p>Use the following 6-digit code to reset your password:</p>
+            <div style="text-align: center; margin: 30px 0;">
+                <span style="font-size: 32px; letter-spacing: 8px;
+                             font-weight: bold; color: #2c3e50;
+                             background: #ecf0f1; padding: 12px 24px;
+                             border-radius: 8px;">{otp}</span>
+            </div>
+            <p style="color: #7f8c8d; font-size: 13px;">
+                This code will expire in {_settings.OTP_EXPIRE_MINUTES} minutes.<br>
+                If you did not request this, please ignore this email.
+            </p>
+        </div>
+    </body>
+    </html>
+    """
+
+    await send_email(to_email, subject, html_body)
+
+
 async def send_invitation_email(
     to_email: str,
     invitation_token: str,

@@ -30,3 +30,5 @@ class AuditAction(str, enum.Enum):
     REJECT = "REJECT"
     ALLOCATE = "ALLOCATE"
     CLOSE = "CLOSE"
+    PASSWORD_RESET = "PASSWORD_RESET"
+    PASSWORD_CHANGE = "PASSWORD_CHANGE"

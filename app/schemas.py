@@ -187,6 +187,25 @@ class LinkClientResponse(BaseModel):
     product_id: uuid.UUID
     client_email: str
 
+# ── Password Reset / Change ──────────────────────────────────────────
+class ForgotPasswordRequest(BaseModel):
+    """User submits email to receive a 6-digit OTP."""
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    """User submits the OTP received via email + new password."""
+    email: EmailStr
+    otp: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+    new_password: str = Field(min_length=8)
+
+
+class ChangePasswordRequest(BaseModel):
+    """Authenticated user changes their own password."""
+    current_password: str
+    new_password: str = Field(min_length=8)
+
+
 # ── Generic ──────────────────────────────────────────────────────────
 class MessageResponse(BaseModel):
     detail: str
