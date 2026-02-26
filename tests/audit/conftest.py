@@ -15,16 +15,8 @@ import pytest_asyncio
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from sqlalchemy import Column, String, Uuid
 from app.models.base import Base
-
-
-# ── Stub SKU table for tests (real SKU model not yet created) ────────
-class _StubSKU(Base):
-    """Minimal stub so the inventory_ledger FK to skus.id resolves."""
-    __tablename__ = "skus"
-    id = Column(Uuid, primary_key=True)
-    name = Column(String(128))
+from app.models.product import Product
 
 
 # ── Engine & session factory (shared across all tests in session) ────
@@ -108,13 +100,37 @@ async def seed_warehouse(db: AsyncSession, admin_id: uuid.UUID) -> "Warehouse":
     return wh
 
 
-async def seed_sku(db: AsyncSession) -> uuid.UUID:
-    """Insert a minimal stub SKU row and return its UUID."""
+async def seed_client(db: AsyncSession, user_id: uuid.UUID, company_name: str = "Test Client") -> "Client":
+    """Insert a minimal Client row and return it."""
+    from app.models.client import Client
+
+    client = Client(
+        id=uuid.uuid4(),
+        user_id=user_id,
+        company_name=company_name,
+    )
+    db.add(client)
+    await db.flush()
+    return client
+
+
+async def seed_sku(db: AsyncSession, *, warehouse_id: uuid.UUID, created_by: uuid.UUID) -> uuid.UUID:
+    """Insert a minimal Product/SKU row and return its UUID."""
     from sqlalchemy import insert
 
     sku_id = uuid.uuid4()
     await db.execute(
-        insert(_StubSKU).values(id=sku_id, name="Test SKU")
+        insert(Product).values(
+            id=sku_id,
+            name="Test SKU",
+            category="FROZEN",
+            unit="KG",
+            quantity=100.0,
+            lot_number="LOT-TEST",
+            sku_code=f"TEST-SKU-{sku_id}",
+            warehouse_id=warehouse_id,
+            created_by=created_by,
+        )
     )
     await db.flush()
     return sku_id
