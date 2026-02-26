@@ -16,7 +16,8 @@ from app.core.database import get_db
 from app.models.user import User
 from app.rbac.context_resolver import resolve_data_scope
 from app.rbac.dependencies import require_permission
-from app.schemas import ClientOut
+from app.schemas import ClientOut, ProductOut
+from app.services import inventory_service
 
 router = APIRouter(prefix="/api/client", tags=["Client"])
 
@@ -37,7 +38,7 @@ async def get_my_profile(
     return ClientOut.model_validate(user.client)
 
 
-@router.get("/inventory")
+@router.get("/inventory", response_model=list[ProductOut])
 async def list_my_inventory(
     user: User = Depends(require_permission("inventory.view")),
     db: AsyncSession = Depends(get_db),
@@ -51,11 +52,7 @@ async def list_my_inventory(
         query.where(Inventory.client_id == scope.client_id)
     """
     scope = await resolve_data_scope(user, db)
-    # TODO: replace with inventory_service.list_inventory(db, scope, skip, limit)
-    return {
-        "detail": "Client inventory listing (stub)",
-        "client_id": str(scope.client_id),
-    }
+    return await inventory_service.list_inventory(db, scope, skip, limit)
 
 
 @router.get("/invoices")
