@@ -65,7 +65,7 @@ async def test_ledger_entry_creation(db: AsyncSession):
     """A ledger row can be inserted and read back."""
     user = await seed_user(db, email="ledger-insert@test.com")
     wh = await seed_warehouse(db, admin_id=user.id)
-    sku_id = await seed_sku(db)
+    sku_id = await seed_sku(db, warehouse_id=wh.id, created_by=user.id)
 
     entry = await _insert_ledger_entry(
         db,
@@ -94,7 +94,7 @@ async def test_ledger_immutability_principle(db: AsyncSession):
     """
     user = await seed_user(db, email="ledger-immut@test.com")
     wh = await seed_warehouse(db, admin_id=user.id)
-    sku_id = await seed_sku(db)
+    sku_id = await seed_sku(db, warehouse_id=wh.id, created_by=user.id)
 
     await _insert_ledger_entry(
         db,
@@ -133,7 +133,7 @@ async def test_inventory_derived_from_ledger_sum(db: AsyncSession):
     """
     user = await seed_user(db, email="ledger-sum@test.com")
     wh = await seed_warehouse(db, admin_id=user.id)
-    sku_id = await seed_sku(db)
+    sku_id = await seed_sku(db, warehouse_id=wh.id, created_by=user.id)
 
     for mt, delta in [
         (MovementType.INWARD, Decimal("100.000")),
@@ -177,7 +177,7 @@ async def test_inventory_derived_per_warehouse(db: AsyncSession):
     db.add(wh_b)
     await db.flush()
 
-    sku_id = await seed_sku(db)
+    sku_id = await seed_sku(db, warehouse_id=wh_a.id, created_by=user.id)
 
     await _insert_ledger_entry(
         db,
