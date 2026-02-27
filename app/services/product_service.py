@@ -18,13 +18,18 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.client import Client
+from app.models.inventory_ledger import InventoryLedger
 from app.models.product import CATEGORY_PREFIX, Product, ProductCategory, StorageUnit
+from app.models.rack import Rack
+from app.models.rack_allocation import RackAllocation
+from app.models.room import Room
 from app.models.user import User
 from app.models.warehouse import Warehouse
 from app.rbac.context_resolver import DataScope
@@ -101,15 +106,26 @@ async def create_product(
     lot_number: str,
     temperature_requirement: float | None,
     warehouse_id: uuid.UUID,
+    rack_id: uuid.UUID,
     created_by: uuid.UUID,
     db: AsyncSession,
 ) -> Product:
     """
-    Create a product record and auto-generate the SKU code.
+    Create a product record, allocate it to a rack, and insert an INWARD
+    ledger entry — all atomically.
 
-    Called by the operator controller after permission + scope checks.
+    Validation order:
+    1. Enum checks (category, unit)
+    2. Warehouse exists
+    3. Rack exists and belongs to this warehouse
+    4. Rack is not already occupied
+    5. Temperature match (rack temp == product temp requirement)
+    6. Capacity sufficient (rack.capacity >= quantity)
+
+    If any step fails the entire operation is rolled back by the outer
+    transaction (get_db dependency).
     """
-    # Validate enums
+    # ── 1. Validate enums ────────────────────────────────────────────
     try:
         cat = ProductCategory(category)
     except ValueError:
@@ -127,7 +143,7 @@ async def create_product(
                    f"Must be one of: {[u.value for u in StorageUnit]}",
         )
 
-    # Load warehouse for SKU code
+    # ── 2. Load warehouse for SKU code ───────────────────────────────
     wh_result = await db.execute(
         select(Warehouse).where(Warehouse.id == warehouse_id)
     )
@@ -138,6 +154,58 @@ async def create_product(
             detail="Warehouse not found",
         )
 
+    # ── 3. Load rack and validate ownership ──────────────────────────
+    rack_result = await db.execute(
+        select(Rack).where(Rack.id == rack_id)
+    )
+    rack = rack_result.scalar_one_or_none()
+    if rack is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Rack not found",
+        )
+
+    # Rack → Room → Warehouse chain check
+    room_result = await db.execute(
+        select(Room).where(Room.id == rack.room_id)
+    )
+    room = room_result.scalar_one_or_none()
+    if room is None or room.warehouse_id != warehouse_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Rack does not belong to the operator's warehouse",
+        )
+
+    # ── 4. Rack must be empty ────────────────────────────────────────
+    if rack.is_occupied:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Rack '{rack.label}' is already occupied",
+        )
+
+    # ── 5. Temperature match ─────────────────────────────────────────
+    if temperature_requirement is not None and rack.temperature is not None:
+        if Decimal(str(temperature_requirement)) != rack.temperature:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"Temperature mismatch: product requires "
+                    f"{temperature_requirement}°C but rack '{rack.label}' "
+                    f"is set to {rack.temperature}°C"
+                ),
+            )
+
+    # ── 6. Capacity check ────────────────────────────────────────────
+    if Decimal(str(quantity)) > rack.capacity:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Quantity {quantity} exceeds rack '{rack.label}' capacity "
+                f"of {rack.capacity}"
+            ),
+        )
+
+    # ── 7. Generate SKU and create product ───────────────────────────
     sku_code = await _generate_sku(cat, warehouse, db)
 
     product = Product(
@@ -156,6 +224,38 @@ async def create_product(
     db.add(product)
     await db.flush()
 
+    # ── 8. Create rack allocation ────────────────────────────────────
+    now = datetime.now(timezone.utc)
+    allocation = RackAllocation(
+        id=uuid.uuid4(),
+        rack_id=rack_id,
+        sku_id=product.id,
+        allocated_by=created_by,
+        allocated_at=now,
+        released_at=None,
+    )
+    db.add(allocation)
+
+    # Mark rack as occupied
+    rack.is_occupied = True
+    await db.flush()
+
+    # ── 9. Insert INWARD ledger entry ────────────────────────────────
+    ledger_entry = InventoryLedger(
+        id=uuid.uuid4(),
+        sku_id=product.id,
+        warehouse_id=warehouse_id,
+        movement_type="INWARD",
+        quantity_delta=quantity,
+        reference_type="RackAllocation",
+        reference_id=allocation.id,
+        performed_by=created_by,
+        reason=f"Inward to rack '{rack.label}'",
+    )
+    db.add(ledger_entry)
+    await db.flush()
+
+    # ── 10. Audit log all three entities ─────────────────────────────
     await audit_service.log(
         db,
         entity_type="Product",
@@ -164,6 +264,27 @@ async def create_product(
         performed_by=created_by,
         old_data=None,
         new_data=to_audit_dict(product),
+    )
+
+    await audit_service.log(
+        db,
+        entity_type="RackAllocation",
+        entity_id=allocation.id,
+        action="ALLOCATE",
+        performed_by=created_by,
+        old_data=None,
+        new_data=to_audit_dict(allocation),
+        reason=f"Allocated SKU {sku_code} to rack '{rack.label}'",
+    )
+
+    await audit_service.log(
+        db,
+        entity_type="InventoryLedger",
+        entity_id=ledger_entry.id,
+        action="CREATE",
+        performed_by=created_by,
+        old_data=None,
+        new_data=to_audit_dict(ledger_entry),
     )
 
     return product

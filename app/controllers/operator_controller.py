@@ -82,6 +82,7 @@ async def create_product(
         lot_number=body.lot_number,
         temperature_requirement=body.temperature_requirement,
         warehouse_id=scope.warehouse_id,
+        rack_id=body.rack_id,
         created_by=user.id,
         db=db,
     )
@@ -187,6 +188,7 @@ async def create_inward(
         lot_number=body.lot_number,
         temperature_requirement=body.temperature_requirement,
         warehouse_id=scope.warehouse_id,
+        rack_id=body.rack_id,
         created_by=user.id,
         db=db,
     )

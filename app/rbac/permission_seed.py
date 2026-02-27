@@ -44,6 +44,9 @@ PERMISSIONS: list[dict[str, str]] = [
     # Warehouse
     {"code": "warehouse.create", "description": "Create a warehouse"},
     {"code": "warehouse.update", "description": "Update warehouse details"},
+    # Storage hierarchy (rooms & racks)
+    {"code": "room.create", "description": "Create a room inside a warehouse"},
+    {"code": "rack.create", "description": "Create a rack inside a room"},
 ]
 
 # ────────────────────────────────────────────────────────────────────

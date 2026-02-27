@@ -21,14 +21,19 @@ from app.rbac.context_resolver import DataScope, resolve_data_scope
 from app.rbac.dependencies import require_permission
 from app.schemas import (
     CreateInvitationRequest,
+    CreateRackRequest,
+    CreateRoomRequest,
     CreateWarehouseRequest,
     InvitationOut,
     MessageResponse,
+    RackOut,
+    RoomOut,
     UpdateWarehouseRequest,
     UserOut,
     WarehouseOut,
 )
 from app.services import invitation_service, session_service, user_service, warehouse_service
+from app.services import room_service, rack_service
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
 
@@ -160,3 +165,68 @@ async def list_invitations(
 ):
     invites = await invitation_service.list_invitations(db, skip, limit)
     return [InvitationOut.model_validate(inv) for inv in invites]
+
+
+# ── Rooms ────────────────────────────────────────────────────────────
+@router.post("/rooms", response_model=RoomOut, status_code=201)
+async def create_room(
+    body: CreateRoomRequest,
+    user: User = Depends(require_permission("room.create")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a room inside a warehouse."""
+    room = await room_service.create_room(
+        name=body.name,
+        warehouse_id=body.warehouse_id,
+        temperature_zone=body.temperature_zone,
+        created_by=user.id,
+        db=db,
+    )
+    return RoomOut.model_validate(room)
+
+
+@router.get("/rooms", response_model=list[RoomOut])
+async def list_rooms(
+    user: User = Depends(require_permission("room.create")),
+    db: AsyncSession = Depends(get_db),
+    warehouse_id: uuid.UUID | None = Query(None),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+):
+    """List rooms, optionally filtered by warehouse."""
+    scope = await resolve_data_scope(user, db)
+    rooms = await room_service.list_rooms(db, scope, warehouse_id, skip, limit)
+    return [RoomOut.model_validate(r) for r in rooms]
+
+
+# ── Racks ────────────────────────────────────────────────────────────
+@router.post("/racks", response_model=RackOut, status_code=201)
+async def create_rack(
+    body: CreateRackRequest,
+    user: User = Depends(require_permission("rack.create")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a rack inside a room."""
+    rack = await rack_service.create_rack(
+        label=body.label,
+        room_id=body.room_id,
+        capacity=body.capacity,
+        temperature=body.temperature,
+        created_by=user.id,
+        db=db,
+    )
+    return RackOut.model_validate(rack)
+
+
+@router.get("/racks", response_model=list[RackOut])
+async def list_racks(
+    user: User = Depends(require_permission("rack.create")),
+    db: AsyncSession = Depends(get_db),
+    room_id: uuid.UUID | None = Query(None),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+):
+    """List racks, optionally filtered by room."""
+    scope = await resolve_data_scope(user, db)
+    racks = await rack_service.list_racks(db, scope, room_id, skip, limit)
+    return [RackOut.model_validate(r) for r in racks]

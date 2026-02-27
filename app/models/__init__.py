@@ -17,6 +17,9 @@ from app.models.product import Product, ProductCategory, StorageUnit
 from app.models.inventory_ledger import InventoryLedger
 from app.models.audit_log import AuditLog
 from app.models.password_reset_otp import PasswordResetOTP
+from app.models.room import Room
+from app.models.rack import Rack
+from app.models.rack_allocation import RackAllocation
 
 __all__ = [
     "Base",
@@ -42,4 +45,7 @@ __all__ = [
     "InventoryLedger",
     "AuditLog",
     "PasswordResetOTP",
+    "Room",
+    "Rack",
+    "RackAllocation",
 ]
