@@ -53,6 +53,12 @@ class InventoryLedger(Base, UUIDPrimaryKeyMixin):
         Enum(MovementType, name="movement_type", create_constraint=True),
         nullable=False,
     )
+    lot_number: Mapped[str] = mapped_column(
+        String(128),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
     quantity_delta: Mapped[Decimal] = mapped_column(
         Numeric(14, 3),
         nullable=False,
