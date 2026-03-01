@@ -35,10 +35,11 @@ async def create_temperature_zone(
     db: AsyncSession,
 ) -> TemperatureZone:
     min_dec, max_dec = _validate_range(min_temp, max_temp)
+    trimmed = zone_name.strip()
 
     existing = (
         await db.execute(
-            select(TemperatureZone).where(TemperatureZone.zone_name == zone_name)
+            select(TemperatureZone).where(TemperatureZone.zone_name == trimmed)
         )
     ).scalar_one_or_none()
     if existing is not None:
@@ -49,7 +50,7 @@ async def create_temperature_zone(
 
     zone = TemperatureZone(
         id=uuid.uuid4(),
-        zone_name=zone_name.strip(),
+        zone_name=trimmed,
         min_temp=min_dec,
         max_temp=max_dec,
     )
