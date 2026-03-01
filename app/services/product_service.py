@@ -350,7 +350,7 @@ async def inward_product(
         warehouse_id=product.warehouse_id,
         movement_type=MovementType.INWARD,
         lot_number=lot_number,
-        quantity_delta=quantity,
+        quantity_delta=Decimal(str(quantity)),
         reference_type="RackAllocation",
         reference_id=allocation.id,
         performed_by=operator_id,
