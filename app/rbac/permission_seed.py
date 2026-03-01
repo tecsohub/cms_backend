@@ -17,6 +17,7 @@ import asyncio
 import uuid
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import settings
@@ -89,23 +90,20 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
 # 3.  SEED FUNCTION (idempotent)
 # ────────────────────────────────────────────────────────────────────
 async def seed(session: AsyncSession) -> None:
-    """Create permissions & roles if they don't already exist."""
+    """Create/repair permissions, roles, and role-permission links idempotently."""
 
-    # ── Quick check: skip entirely if already seeded ─────────────────
     existing_perms = (await session.execute(select(Permission))).scalars().all()
     existing_codes = {p.code for p in existing_perms}
 
-    expected_perm_codes = {p["code"] for p in PERMISSIONS}
-    expected_role_names = set(ROLE_PERMISSIONS.keys())
-
-    existing_roles = (await session.execute(select(Role))).scalars().all()
+    existing_roles = (
+        await session.execute(select(Role).options(selectinload(Role.permissions)))
+    ).scalars().all()
     existing_role_names = {r.name for r in existing_roles}
 
-    if expected_perm_codes <= existing_codes and expected_role_names <= existing_role_names:
-        print("✔  Seed data already present — skipping.")
-        return
     code_to_perm: dict[str, Permission] = {p.code: p for p in existing_perms}
+    name_to_role: dict[str, Role] = {r.name: r for r in existing_roles}
 
+    # ── Permissions ───────────────────────────────────────────────────
     for pdata in PERMISSIONS:
         if pdata["code"] not in existing_codes:
             perm = Permission(id=uuid.uuid4(), **pdata)
@@ -114,23 +112,35 @@ async def seed(session: AsyncSession) -> None:
 
     await session.flush()  # ensure IDs are available
 
-    # ── Roles ────────────────────────────────────────────────────────
+    # ── Roles (create missing) ───────────────────────────────────────
     for role_name, perm_codes in ROLE_PERMISSIONS.items():
         if role_name in existing_role_names:
             continue
+
         role = Role(
             id=uuid.uuid4(),
             name=role_name,
             description=f"Default {role_name} role",
         )
+        session.add(role)
+        name_to_role[role_name] = role
+
+    await session.flush()
+
+    # ── Role ↔ Permission links (backfill missing associations) ──────
+    for role_name, perm_codes in ROLE_PERMISSIONS.items():
+        role = name_to_role[role_name]
+        existing_role_perm_codes = {p.code for p in role.permissions}
+
         for code in perm_codes:
+            if code in existing_role_perm_codes:
+                continue
             perm_obj = code_to_perm.get(code)
             if perm_obj:
                 role.permissions.append(perm_obj)
-        session.add(role)
 
     await session.commit()
-    print("✔  Permissions and roles seeded successfully.")
+    print("✔  Permissions, roles, and role-permission mappings seeded successfully.")
 
 
 # ────────────────────────────────────────────────────────────────────
