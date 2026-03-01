@@ -1,0 +1,61 @@
+ROADMAP DEVIATION LOG
+=====================
+Generated: 2026-02-28
+
+This file lists features that ARE built but DIFFER from the roadmap specification.
+Items that are simply not started are NOT listed here — only conflicts.
+
+
+1. INWARD MANAGEMENT — Truck-Based vs Pallet-Based
+   Roadmap: "Truck-Level Entry" — one inward record per arriving truck, with
+            metadata (Truck Number, Driver Details, Arrival Date), multiple
+            pallets grouped under one truck record, and an auto-generated
+            Inward Reference Number.
+   Actual:  Inward is done at the INDIVIDUAL PALLET level (one product per API
+            call via POST /api/operator/products). There is no Truck model, no
+            truck grouping, no Inward Reference Number. A SKU code is auto-
+            generated per pallet instead (format: CATEGORY-WH_CODE-YYYYMMDD-SEQ).
+   Files:   app/services/product_service.py, app/controllers/operator_controller.py
+
+
+2. SKU STRUCTURE — Format Differs
+   Roadmap: "Format SKU based on rules (e.g., Client + Item + Pallet Reference)."
+   Actual:  SKU format is {CATEGORY_PREFIX}-{WAREHOUSE_CODE}-{YYYYMMDD}-{SEQ},
+            e.g. FRZ-COLD-20260223-0001. Client is not part of the SKU (it may
+            not be known at intake time). Item name is not encoded either.
+   Files:   app/services/product_service.py (_generate_sku), app/models/product.py
+
+
+3. STORAGE ZONE HIERARCHY — Simplified
+   Roadmap: "Define storage zones hierarchy (Chambers, Racks, Floors, Temp Zones)."
+   Actual:  Hierarchy is Warehouse → Room → Rack (three levels). There are no
+            "Chambers," "Floors," or "Temp Zones" as distinct entities. Rooms
+            and Racks each have a single temperature value, not min/max ranges.
+   Files:   app/models/room.py, app/models/rack.py
+
+
+4. ZONE TEMPERATURE — Single Value vs Min/Max Range
+   Roadmap: "Configure Min/Max temperature ranges per zone."
+   Actual:  Room has a single temperature_zone (Decimal) and Rack has a single
+            temperature (Decimal). There are no separate min/max columns.
+   Files:   app/models/room.py (temperature_zone), app/models/rack.py (temperature)
+
+
+5. ALLOCATION MODEL — Atomic Creation, Not Separate Step
+   Roadmap: "Inventory Activation — pallet inventory becomes 'active' only after
+            confirmed allocation" (implies a two-step process: create pallet,
+            then allocate separately).
+   Actual:  Product creation and rack allocation happen ATOMICALLY in a single
+            API call (POST /api/operator/products). There is no intermediate
+            "Pending Allocation" state. The pallet is created and allocated in
+            one transaction.
+   Files:   app/services/product_service.py (create_product)
+
+
+6. CAPACITY MODEL — Binary (One-Pallet-Per-Rack) vs Partial
+   Roadmap: Implies zones with configurable capacity by weight or pallet count,
+            with capacity reducing incrementally as pallets are added.
+   Actual:  Each Rack has a numeric capacity field, but is_occupied is a simple
+            boolean flag. One rack holds exactly one SKU at a time (exclusive).
+            There is no partial fill / multi-pallet-per-rack capability.
+   Files:   app/models/rack.py (is_occupied: bool), app/services/product_service.py
