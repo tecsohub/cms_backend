@@ -8,8 +8,7 @@ Every route enforces:
 
 import uuid
 
-from fastapi import APIRouter, Depends, Query
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -45,8 +44,6 @@ async def get_my_warehouse(
     """
     scope = await resolve_data_scope(user, db)
     if scope.warehouse_id is None:
-        from fastapi import HTTPException, status
-
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="No warehouse assigned",
@@ -68,8 +65,6 @@ async def create_product(
     """
     scope = await resolve_data_scope(user, db)
     if scope.warehouse_id is None:
-        from fastapi import HTTPException, status
-
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="No warehouse assigned",
@@ -143,8 +138,6 @@ async def create_inward(
     """
     scope = await resolve_data_scope(user, db)
     if scope.warehouse_id is None:
-        from fastapi import HTTPException, status
-
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="No warehouse assigned",
@@ -161,9 +154,9 @@ async def create_inward(
         db=db,
     )
     if not result["success"]:
-        return JSONResponse(
+        raise HTTPException(
             status_code=result["status_code"],
-            content={"detail": result["detail"]},
+            detail=result["detail"],
         )
 
     return InwardResponse(
