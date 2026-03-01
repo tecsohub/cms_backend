@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.room import Room
+from app.models.temperature_zone import TemperatureZone
 from app.models.warehouse import Warehouse
 from app.rbac.context_resolver import DataScope
 from app.services import audit_service
@@ -24,7 +25,7 @@ async def create_room(
     *,
     name: str,
     warehouse_id: uuid.UUID,
-    temperature_zone: float | None,
+    temperature_zone_id: uuid.UUID,
     created_by: uuid.UUID,
     db: AsyncSession,
 ) -> Room:
@@ -44,11 +45,21 @@ async def create_room(
             detail="Warehouse not found",
         )
 
+    zone_result = await db.execute(
+        select(TemperatureZone).where(TemperatureZone.id == temperature_zone_id)
+    )
+    zone = zone_result.scalar_one_or_none()
+    if zone is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Temperature zone not found",
+        )
+
     room = Room(
         id=uuid.uuid4(),
         name=name,
         warehouse_id=warehouse_id,
-        temperature_zone=temperature_zone,
+        temperature_zone_id=temperature_zone_id,
     )
     db.add(room)
     await db.flush()

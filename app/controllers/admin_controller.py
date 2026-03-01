@@ -23,6 +23,9 @@ from app.schemas import (
     CreateInvitationRequest,
     CreateRackRequest,
     CreateRoomRequest,
+    TemperatureZoneCreateRequest,
+    TemperatureZoneOut,
+    TemperatureZoneUpdateRequest,
     CreateWarehouseRequest,
     InvitationOut,
     MessageResponse,
@@ -33,7 +36,7 @@ from app.schemas import (
     WarehouseOut,
 )
 from app.services import invitation_service, session_service, user_service, warehouse_service
-from app.services import room_service, rack_service
+from app.services import room_service, rack_service, temperature_zone_service
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
 
@@ -178,7 +181,7 @@ async def create_room(
     room = await room_service.create_room(
         name=body.name,
         warehouse_id=body.warehouse_id,
-        temperature_zone=body.temperature_zone,
+        temperature_zone_id=body.temperature_zone_id,
         created_by=user.id,
         db=db,
     )
@@ -211,7 +214,6 @@ async def create_rack(
         label=body.label,
         room_id=body.room_id,
         capacity=body.capacity,
-        temperature=body.temperature,
         created_by=user.id,
         db=db,
     )
@@ -230,3 +232,63 @@ async def list_racks(
     scope = await resolve_data_scope(user, db)
     racks = await rack_service.list_racks(db, scope, room_id, skip, limit)
     return [RackOut.model_validate(r) for r in racks]
+
+
+# ── Temperature Zones ────────────────────────────────────────────────
+@router.post("/temperature-zones", response_model=TemperatureZoneOut, status_code=201)
+async def create_temperature_zone(
+    body: TemperatureZoneCreateRequest,
+    user: User = Depends(require_permission("temperature.zone.create")),
+    db: AsyncSession = Depends(get_db),
+):
+    zone = await temperature_zone_service.create_temperature_zone(
+        zone_name=body.zone_name,
+        min_temp=body.min_temp,
+        max_temp=body.max_temp,
+        created_by=user.id,
+        db=db,
+    )
+    return TemperatureZoneOut.model_validate(zone)
+
+
+@router.get("/temperature-zones", response_model=list[TemperatureZoneOut])
+async def list_temperature_zones(
+    user: User = Depends(require_permission("temperature.zone.view")),
+    db: AsyncSession = Depends(get_db),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+):
+    zones = await temperature_zone_service.list_temperature_zones(db, skip=skip, limit=limit)
+    return [TemperatureZoneOut.model_validate(z) for z in zones]
+
+
+@router.patch("/temperature-zones/{zone_id}", response_model=TemperatureZoneOut)
+async def update_temperature_zone(
+    zone_id: uuid.UUID,
+    body: TemperatureZoneUpdateRequest,
+    user: User = Depends(require_permission("temperature.zone.update")),
+    db: AsyncSession = Depends(get_db),
+):
+    zone = await temperature_zone_service.update_temperature_zone(
+        zone_id=zone_id,
+        zone_name=body.zone_name,
+        min_temp=body.min_temp,
+        max_temp=body.max_temp,
+        updated_by=user.id,
+        db=db,
+    )
+    return TemperatureZoneOut.model_validate(zone)
+
+
+@router.delete("/temperature-zones/{zone_id}", response_model=MessageResponse)
+async def delete_temperature_zone(
+    zone_id: uuid.UUID,
+    user: User = Depends(require_permission("temperature.zone.delete")),
+    db: AsyncSession = Depends(get_db),
+):
+    await temperature_zone_service.delete_temperature_zone(
+        zone_id=zone_id,
+        deleted_by=user.id,
+        db=db,
+    )
+    return MessageResponse(detail="Temperature zone deleted")

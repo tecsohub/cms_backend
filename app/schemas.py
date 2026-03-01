@@ -159,7 +159,6 @@ class InwardRequest(BaseModel):
 
     product_id: uuid.UUID
     client_email: EmailStr
-    room_id: uuid.UUID
     rack_id: uuid.UUID
     quantity: float = Field(gt=0)
     lot_number: str = Field(min_length=1, max_length=128)
@@ -218,17 +217,39 @@ class ChangePasswordRequest(BaseModel):
 
 
 # ── Room ─────────────────────────────────────────────────────────────
+class TemperatureZoneCreateRequest(BaseModel):
+    zone_name: str = Field(min_length=1, max_length=128)
+    min_temp: float
+    max_temp: float
+
+
+class TemperatureZoneUpdateRequest(BaseModel):
+    zone_name: str | None = Field(default=None, min_length=1, max_length=128)
+    min_temp: float | None = None
+    max_temp: float | None = None
+
+
+class TemperatureZoneOut(BaseModel):
+    id: uuid.UUID
+    zone_name: str
+    min_temp: float
+    max_temp: float
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class CreateRoomRequest(BaseModel):
     name: str = Field(min_length=1, max_length=256)
     warehouse_id: uuid.UUID
-    temperature_zone: float | None = None
+    temperature_zone_id: uuid.UUID
 
 
 class RoomOut(BaseModel):
     id: uuid.UUID
     name: str
     warehouse_id: uuid.UUID
-    temperature_zone: float | None = None
+    temperature_zone_id: uuid.UUID
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -239,7 +260,6 @@ class CreateRackRequest(BaseModel):
     label: str = Field(min_length=1, max_length=128)
     room_id: uuid.UUID
     capacity: float = Field(gt=0)
-    temperature: float | None = None
 
 
 class RackOut(BaseModel):
@@ -247,7 +267,6 @@ class RackOut(BaseModel):
     label: str
     room_id: uuid.UUID
     capacity: float
-    temperature: float | None = None
     is_occupied: bool
     created_at: datetime
 

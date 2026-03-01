@@ -48,6 +48,11 @@ PERMISSIONS: list[dict[str, str]] = [
     # Storage hierarchy (rooms & racks)
     {"code": "room.create", "description": "Create a room inside a warehouse"},
     {"code": "rack.create", "description": "Create a rack inside a room"},
+    # Temperature zones
+    {"code": "temperature.zone.create", "description": "Create global temperature zones"},
+    {"code": "temperature.zone.view", "description": "View global temperature zones"},
+    {"code": "temperature.zone.update", "description": "Update global temperature zones"},
+    {"code": "temperature.zone.delete", "description": "Delete global temperature zones"},
 ]
 
 # ────────────────────────────────────────────────────────────────────
@@ -64,6 +69,10 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         "inventory.move.internal",
         "inventory.dispatch.execute",
         "inventory.view",
+        "temperature.zone.create",
+        "temperature.zone.view",
+        "temperature.zone.update",
+        "temperature.zone.delete",
     ],
     "INVENTORY_MANAGER": [
         "inventory.inward.create",
@@ -71,6 +80,10 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         "inventory.move.internal",
         "inventory.dispatch.execute",
         "inventory.view",
+        "temperature.zone.create",
+        "temperature.zone.view",
+        "temperature.zone.update",
+        "temperature.zone.delete",
         # NOTE: No billing.invoice.approve here — governance rule
     ],
     "BILLING_MANAGER": [

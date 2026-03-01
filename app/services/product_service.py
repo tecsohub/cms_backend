@@ -18,6 +18,7 @@ from app.models.product import CATEGORY_PREFIX, Product, ProductCategory, Storag
 from app.models.rack import Rack
 from app.models.rack_allocation import RackAllocation
 from app.models.room import Room
+from app.models.temperature_zone import TemperatureZone
 from app.models.user import User
 from app.models.warehouse import Warehouse
 from app.rbac.context_resolver import DataScope
@@ -235,7 +236,6 @@ async def inward_product(
     *,
     product_id: uuid.UUID,
     client_email: str,
-    room_id: uuid.UUID,
     rack_id: uuid.UUID,
     quantity: float,
     lot_number: str,
@@ -277,15 +277,10 @@ async def inward_product(
     if rack is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Rack not found")
 
-    room_result = await db.execute(select(Room).where(Room.id == room_id))
+    room_result = await db.execute(select(Room).where(Room.id == rack.room_id))
     room = room_result.scalar_one_or_none()
     if room is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found")
-    if rack.room_id != room.id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Rack does not belong to the selected room",
-        )
     if room.warehouse_id != product.warehouse_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -297,15 +292,31 @@ async def inward_product(
             detail=f"Rack '{rack.label}' is already occupied",
         )
 
-    if product.temperature_requirement is not None and rack.temperature is not None:
-        if Decimal(str(product.temperature_requirement)) != rack.temperature:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    f"Temperature mismatch: product requires {product.temperature_requirement}°C "
-                    f"but rack '{rack.label}' is set to {rack.temperature}°C"
-                ),
-            )
+    if product.temperature_requirement is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Product temperature requirement is required for inward",
+        )
+
+    zone_result = await db.execute(
+        select(TemperatureZone).where(TemperatureZone.id == room.temperature_zone_id)
+    )
+    zone = zone_result.scalar_one_or_none()
+    if zone is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Room temperature zone is missing",
+        )
+
+    required_temp = Decimal(str(product.temperature_requirement))
+    if required_temp < zone.min_temp or required_temp > zone.max_temp:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Temperature mismatch: product requires {product.temperature_requirement}°C "
+                f"but room zone '{zone.zone_name}' allows {zone.min_temp}°C to {zone.max_temp}°C"
+            ),
+        )
 
     if Decimal(str(quantity)) > rack.capacity:
         raise HTTPException(
@@ -377,7 +388,9 @@ async def inward_product(
         new_data={
             "product_id": str(product.id),
             "warehouse_id": str(product.warehouse_id),
+            "room_id": str(room.id),
             "rack_id": str(rack.id),
+            "temperature_zone_id": str(zone.id),
             "lot_number": lot_number,
             "quantity": quantity,
             "unit": product.unit.value,
@@ -445,7 +458,6 @@ async def inward_product_with_cleanup(
     *,
     product_id: uuid.UUID,
     client_email: str,
-    room_id: uuid.UUID,
     rack_id: uuid.UUID,
     quantity: float,
     lot_number: str,
@@ -459,7 +471,6 @@ async def inward_product_with_cleanup(
         result = await inward_product(
             product_id=product_id,
             client_email=client_email,
-            room_id=room_id,
             rack_id=rack_id,
             quantity=quantity,
             lot_number=lot_number,

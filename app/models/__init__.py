@@ -20,6 +20,7 @@ from app.models.password_reset_otp import PasswordResetOTP
 from app.models.room import Room
 from app.models.rack import Rack
 from app.models.rack_allocation import RackAllocation
+from app.models.temperature_zone import TemperatureZone
 
 __all__ = [
     "Base",
@@ -48,4 +49,5 @@ __all__ = [
     "Room",
     "Rack",
     "RackAllocation",
+    "TemperatureZone",
 ]

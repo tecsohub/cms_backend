@@ -27,7 +27,6 @@ async def create_rack(
     label: str,
     room_id: uuid.UUID,
     capacity: float,
-    temperature: float | None,
     created_by: uuid.UUID,
     db: AsyncSession,
 ) -> Rack:
@@ -51,7 +50,6 @@ async def create_rack(
         label=label,
         room_id=room_id,
         capacity=capacity,
-        temperature=temperature,
         is_occupied=False,
     )
     db.add(rack)
@@ -129,11 +127,9 @@ async def get_rack_by_id(
 async def list_available_racks(
     db: AsyncSession,
     warehouse_id: uuid.UUID,
-    temperature: float | None = None,
 ) -> list[Rack]:
     """
-    Return empty (unoccupied) racks in the given warehouse, optionally
-    filtered by matching temperature.
+    Return empty (unoccupied) racks in the given warehouse.
 
     Useful for operators to pick a rack during inward.
     """
@@ -145,9 +141,6 @@ async def list_available_racks(
             Rack.is_occupied.is_(False),
         )
     )
-
-    if temperature is not None:
-        stmt = stmt.where(Rack.temperature == temperature)
 
     stmt = stmt.order_by(Rack.label)
     result = await db.execute(stmt)

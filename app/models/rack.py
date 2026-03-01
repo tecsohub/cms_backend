@@ -8,7 +8,6 @@ Each rack holds a single SKU at a time (exclusive).
 
 Key fields:
 - capacity   : maximum quantity (same unit as the product) this rack can hold
-- temperature : the rack's temperature setting; must match the product's requirement
 - is_occupied : denormalized flag set by the allocation service
 """
 
@@ -39,11 +38,6 @@ class Rack(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         Numeric(14, 3),
         nullable=False,
         comment="Max storage quantity this rack can hold",
-    )
-    temperature: Mapped[Decimal | None] = mapped_column(
-        Numeric(5, 2),
-        nullable=True,
-        comment="Rack temperature setting (°C)",
     )
     is_occupied: Mapped[bool] = mapped_column(
         Boolean,
