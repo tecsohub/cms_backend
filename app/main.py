@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.controllers.admin_controller import router as admin_router
 from app.controllers.auth_controller import router as auth_router
 from app.controllers.client_controller import router as client_router
+from app.controllers.inventory_analytics_controller import router as inventory_analytics_router
 from app.controllers.operator_controller import router as operator_router
 from app.core.config import settings
 from app.core.database import engine
@@ -57,6 +58,7 @@ def create_app() -> FastAPI:
     app.include_router(admin_router)
     app.include_router(operator_router)
     app.include_router(client_router)
+    app.include_router(inventory_analytics_router)
 
     # ── Health check ─────────────────────────────────────────────────
     @app.get("/health", tags=["Health"])

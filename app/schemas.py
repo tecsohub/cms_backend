@@ -197,6 +197,34 @@ class InwardResponse(BaseModel):
     client_linked: bool
     invitation_sent: bool
 
+
+# ── Inventory Analytics (read-only, ledger-derived) ────────────────
+class InventoryDashboardOut(BaseModel):
+    product_id: uuid.UUID
+    product_name: str
+    unit: str
+    total_quantity: float
+    warehouse_id: uuid.UUID
+    has_lot_breakdown: bool
+
+
+class InventoryLotStockOut(BaseModel):
+    product_id: uuid.UUID
+    lot_number: str
+    inward_date: datetime
+    current_quantity: float
+    unit: str
+    warehouse_id: uuid.UUID
+
+
+class InventoryAgingOut(BaseModel):
+    product_id: uuid.UUID
+    lot_number: str
+    inward_date: datetime
+    aging_days: int
+    current_quantity: float
+    unit: str
+
 # ── Password Reset / Change ──────────────────────────────────────────
 class ForgotPasswordRequest(BaseModel):
     """User submits email to receive a 6-digit OTP."""
