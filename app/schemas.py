@@ -144,22 +144,24 @@ class ClientOut(BaseModel):
 
     model_config = {"from_attributes": True}
 
-# ── Product / Pallet Intake ──────────────────────────────────────────
+# ── Product / Inward ─────────────────────────────────────────────────
 class ProductCreateRequest(BaseModel):
-    """Operator submits product details during warehouse intake."""
+    """Step 1: create logical product (SKU definition only)."""
     name: str = Field(min_length=1, max_length=256)
     description: str | None = None
     category: str = Field(description="One of: FROZEN, CHILLED, DRY, PHARMA, OTHER")
     unit: str = Field(description="One of: KG, TON, BOX, PALLET, LITRE, UNIT")
-    quantity: float = Field(gt=0)
-    lot_number: str = Field(min_length=1, max_length=128, description="Lot/batch number for the pallet")
     temperature_requirement: float | None = None
-    rack_id: uuid.UUID = Field(description="Rack to allocate this product/pallet to")
 
 
-class ProductLinkClientRequest(BaseModel):
-    """After product creation, operator provides client email."""
-    email: EmailStr
+class InwardRequest(BaseModel):
+    """Step 2: complete inward for an existing logical product."""
+
+    product_id: uuid.UUID
+    client_email: EmailStr
+    rack_id: uuid.UUID
+    quantity: float = Field(gt=0)
+    lot_number: str = Field(min_length=1, max_length=128)
 
 
 class ProductOut(BaseModel):
@@ -168,8 +170,6 @@ class ProductOut(BaseModel):
     description: str | None = None
     category: str
     unit: str
-    quantity: float
-    lot_number: str
     temperature_requirement: float | None = None
     sku_code: str
     warehouse_id: uuid.UUID
@@ -187,6 +187,43 @@ class LinkClientResponse(BaseModel):
     invitation_sent: bool
     product_id: uuid.UUID
     client_email: str
+
+
+class InwardResponse(BaseModel):
+    detail: str
+    product_id: uuid.UUID
+    ledger_id: uuid.UUID
+    rack_allocation_id: uuid.UUID
+    client_linked: bool
+    invitation_sent: bool
+
+
+# ── Inventory Analytics (read-only, ledger-derived) ────────────────
+class InventoryDashboardOut(BaseModel):
+    product_id: uuid.UUID
+    product_name: str
+    unit: str
+    total_quantity: float
+    warehouse_id: uuid.UUID
+    has_lot_breakdown: bool
+
+
+class InventoryLotStockOut(BaseModel):
+    product_id: uuid.UUID
+    lot_number: str
+    inward_date: datetime
+    current_quantity: float
+    unit: str
+    warehouse_id: uuid.UUID
+
+
+class InventoryAgingOut(BaseModel):
+    product_id: uuid.UUID
+    lot_number: str
+    inward_date: datetime
+    aging_days: int
+    current_quantity: float
+    unit: str
 
 # ── Password Reset / Change ──────────────────────────────────────────
 class ForgotPasswordRequest(BaseModel):
@@ -208,17 +245,39 @@ class ChangePasswordRequest(BaseModel):
 
 
 # ── Room ─────────────────────────────────────────────────────────────
+class TemperatureZoneCreateRequest(BaseModel):
+    zone_name: str = Field(min_length=1, max_length=128)
+    min_temp: float
+    max_temp: float
+
+
+class TemperatureZoneUpdateRequest(BaseModel):
+    zone_name: str | None = Field(default=None, min_length=1, max_length=128)
+    min_temp: float | None = None
+    max_temp: float | None = None
+
+
+class TemperatureZoneOut(BaseModel):
+    id: uuid.UUID
+    zone_name: str
+    min_temp: float
+    max_temp: float
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class CreateRoomRequest(BaseModel):
     name: str = Field(min_length=1, max_length=256)
     warehouse_id: uuid.UUID
-    temperature_zone: float | None = None
+    temperature_zone_id: uuid.UUID
 
 
 class RoomOut(BaseModel):
     id: uuid.UUID
     name: str
     warehouse_id: uuid.UUID
-    temperature_zone: float | None = None
+    temperature_zone_id: uuid.UUID
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -229,7 +288,6 @@ class CreateRackRequest(BaseModel):
     label: str = Field(min_length=1, max_length=128)
     room_id: uuid.UUID
     capacity: float = Field(gt=0)
-    temperature: float | None = None
 
 
 class RackOut(BaseModel):
@@ -237,7 +295,6 @@ class RackOut(BaseModel):
     label: str
     room_id: uuid.UUID
     capacity: float
-    temperature: float | None = None
     is_occupied: bool
     created_at: datetime
 

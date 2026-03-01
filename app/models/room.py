@@ -1,17 +1,9 @@
 from __future__ import annotations
 
-"""
-Room model.
-
-A Room is a physical section inside a Warehouse.
-Rooms carry a temperature zone so that racks within them inherit
-compatible temperature ranges.
-"""
+"""Room model."""
 
 import uuid
-from decimal import Decimal
-
-from sqlalchemy import ForeignKey, Numeric, String
+from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from typing import TYPE_CHECKING
@@ -20,6 +12,7 @@ from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 
 if TYPE_CHECKING:
     from app.models.rack import Rack
+    from app.models.temperature_zone import TemperatureZone
     from app.models.warehouse import Warehouse
 
 
@@ -31,10 +24,9 @@ class Room(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         ForeignKey("warehouses.id", ondelete="CASCADE"),
         nullable=False,
     )
-    temperature_zone: Mapped[Decimal | None] = mapped_column(
-        Numeric(5, 2),
-        nullable=True,
-        comment="Target temperature (°C) for this room",
+    temperature_zone_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("temperature_zones.id", ondelete="RESTRICT"),
+        nullable=False,
     )
 
     # ── Relationships ────────────────────────────────────────────────
@@ -44,6 +36,10 @@ class Room(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     )
     racks: Mapped[list["Rack"]] = relationship(
         back_populates="room",
+        lazy="selectin",
+    )
+    temperature_zone: Mapped["TemperatureZone"] = relationship(
+        back_populates="rooms",
         lazy="selectin",
     )
 

@@ -1,20 +1,8 @@
-"""
-Product model — represents a pallet of goods entering a cold-storage warehouse.
+"""Product model — logical SKU entity.
 
-Each record captures the product details entered by an operator during the
-inward/intake process.  A pallet groups items with the same **lot/batch
-number**.  A unique SKU code is auto-generated from product attributes:
-
-    {CATEGORY_PREFIX}-{WAREHOUSE_CODE}-{YYYYMMDD}-{SEQ}
-    e.g.  FRZ-WH01-20260223-0001
-
-The `client_id` is nullable because the client may not yet exist at
-intake time — the operator provides an email, and the system either
-links an existing client or sends an invitation.  Once the client
-accepts, `client_id` is back-filled by querying on `client_email`.
-
-The inventory_ledger.sku_id FK already points at a table named "skus",
-so we use that as __tablename__ to keep the FK consistent.
+This table stores stable product metadata (name/category/unit/etc.) only.
+Physical stock details such as quantity and lot number are captured in the
+append-only ``inventory_ledger`` during inward.
 """
 
 from __future__ import annotations
@@ -80,22 +68,10 @@ class Product(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         Enum(StorageUnit, name="storage_unit", create_constraint=True),
         nullable=False,
     )
-    quantity: Mapped[float] = mapped_column(
-        Numeric(14, 3),
-        nullable=False,
-    )
     temperature_requirement: Mapped[float | None] = mapped_column(
         Numeric(5, 2),
         nullable=True,
         comment="Required storage temperature in °C",
-    )
-
-    # ── Pallet / batch tracking ──────────────────────────────────────
-    lot_number: Mapped[str] = mapped_column(
-        String(128),
-        nullable=False,
-        index=True,
-        comment="Lot/batch number — all items on the pallet share this",
     )
 
     # ── Auto-generated SKU ───────────────────────────────────────────
@@ -140,4 +116,4 @@ class Product(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     )
 
     def __repr__(self) -> str:
-        return f"<Product {self.sku_code} - {self.name} lot={self.lot_number}>"
+        return f"<Product {self.sku_code} - {self.name}>"

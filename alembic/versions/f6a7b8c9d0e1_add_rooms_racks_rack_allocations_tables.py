@@ -1,7 +1,7 @@
 """add_rooms_racks_rack_allocations_tables
 
 Revision ID: f6a7b8c9d0e1
-Revises: ee5fe9ae0bf8
+Revises: a7b9c1d3e5f7
 Create Date: 2026-02-27 12:00:00.000000
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = 'f6a7b8c9d0e1'
-down_revision: Union[str, Sequence[str], None] = 'ee5fe9ae0bf8'
+down_revision: Union[str, Sequence[str], None] = 'a7b9c1d3e5f7'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

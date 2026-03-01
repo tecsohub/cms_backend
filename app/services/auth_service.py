@@ -46,6 +46,7 @@ from app.models.role import Role
 from app.models.session import UserSession
 from app.models.user import User, UserStatus
 from app.models.warehouse import Warehouse
+from app.models.enums import AuditAction
 from app.services import audit_service, session_service
 from app.services.audit_serializer import to_audit_dict
 from app.services import product_service
@@ -570,7 +571,7 @@ async def reset_password_with_otp(
         db,
         entity_type="User",
         entity_id=user.id,
-        action="PASSWORD_RESET",
+        action=AuditAction.PASSWORD_RESET,
         performed_by=user.id,
         old_data=None,
         new_data={"sessions_revoked": revoked},
@@ -627,7 +628,7 @@ async def change_password(
         db,
         entity_type="User",
         entity_id=user.id,
-        action="PASSWORD_CHANGE",
+        action=AuditAction.PASSWORD_CHANGE,
         performed_by=user.id,
         old_data=None,
         new_data={"sessions_revoked": revoked},
