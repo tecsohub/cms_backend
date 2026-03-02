@@ -163,7 +163,6 @@ class InwardRequest(BaseModel):
     rack_id: uuid.UUID
     quantity: float = Field(gt=0)
     lot_number: str = Field(min_length=1, max_length=128)
-    warehouse_id: uuid.UUID
 
 
 class ProductOut(BaseModel):
