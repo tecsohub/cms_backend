@@ -152,6 +152,7 @@ class ProductCreateRequest(BaseModel):
     category: str = Field(description="One of: FROZEN, CHILLED, DRY, PHARMA, OTHER")
     unit: str = Field(description="One of: KG, TON, BOX, PALLET, LITRE, UNIT")
     temperature_requirement: float | None = None
+    warehouse_id: uuid.UUID
 
 
 class InwardRequest(BaseModel):

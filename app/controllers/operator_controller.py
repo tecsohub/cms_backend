@@ -64,11 +64,9 @@ async def create_product(
     Step 1: Create logical product (draft SKU entity).
     """
     scope = await resolve_data_scope(user, db)
-    if scope.warehouse_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="No warehouse assigned",
-        )
+    if scope.warehouse_id:
+        body.warehouse_id = scope.warehouse_id  # enforce warehouse assignment for operators
+
 
     product = await product_service.create_product(
         name=body.name,
@@ -76,7 +74,7 @@ async def create_product(
         category=body.category,
         unit=body.unit,
         temperature_requirement=body.temperature_requirement,
-        warehouse_id=scope.warehouse_id,
+        warehouse_id=body.warehouse_id,
         created_by=user.id,
         db=db,
     )
