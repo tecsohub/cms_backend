@@ -135,11 +135,11 @@ async def create_inward(
     On inward failure, draft product is auto-deleted.
     """
     scope = await resolve_data_scope(user, db)
-    if scope.warehouse_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="No warehouse assigned",
-        )
+    # if scope.warehouse_id is None:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_403_FORBIDDEN,
+    #         detail="No warehouse assigned",
+    #     )
 
     result = await product_service.inward_product_with_cleanup(
         product_id=body.product_id,
