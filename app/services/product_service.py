@@ -210,12 +210,19 @@ async def _bind_client_for_inward(
         )
         return True, False
 
-    invitation = await invitation_service.create_invitation(
-        email=email_norm,
-        role_assigned="CLIENT",
-        invited_by=operator_id,
-        db=db,
-    )
+    invitation = None
+    try:
+        invitation = await invitation_service.create_invitation(
+            email=email_norm,
+            role_assigned="CLIENT",
+            invited_by=operator_id,
+            db=db,
+        )
+    except HTTPException:
+        raise
+    except Exception:
+        # Temporary inward-flow bypass: never fail inward due to SMTP/email errors.
+        invitation = None
     old_email = product.client_email
     product.client_email = email_norm
     await db.flush()
@@ -226,10 +233,13 @@ async def _bind_client_for_inward(
         action="UPDATE",
         performed_by=operator_id,
         old_data={"client_email": old_email},
-        new_data={"client_email": email_norm, "invitation_id": str(invitation.id)},
+        new_data={
+            "client_email": email_norm,
+            "invitation_id": str(invitation.id) if invitation is not None else None,
+        },
         reason="Client invitation created during inward",
     )
-    return False, True
+    return False, invitation is not None
 
 
 async def inward_product(
