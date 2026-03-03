@@ -8,7 +8,7 @@ from decimal import Decimal
 from typing import Any
 
 from fastapi import HTTPException, status
-from sqlalchemy import delete, func, select
+from sqlalchemy import and_, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.client import Client
@@ -597,7 +597,37 @@ async def list_products(
     limit: int = 50,
 ) -> list[Product]:
     """List products scoped by the caller's role."""
-    stmt = select(Product)
+    latest_active_alloc_sq = (
+        select(
+            RackAllocation.id.label("allocation_id"),
+            RackAllocation.sku_id.label("sku_id"),
+            func.row_number()
+            .over(
+                partition_by=RackAllocation.sku_id,
+                order_by=RackAllocation.allocated_at.desc(),
+            )
+            .label("rn"),
+        )
+        .where(RackAllocation.released_at.is_(None))
+        .subquery()
+    )
+
+    stmt = (
+        select(Product, Rack, Room)
+        .outerjoin(
+            latest_active_alloc_sq,
+            and_(
+                latest_active_alloc_sq.c.sku_id == Product.id,
+                latest_active_alloc_sq.c.rn == 1,
+            ),
+        )
+        .outerjoin(
+            RackAllocation,
+            RackAllocation.id == latest_active_alloc_sq.c.allocation_id,
+        )
+        .outerjoin(Rack, Rack.id == RackAllocation.rack_id)
+        .outerjoin(Room, Room.id == Rack.room_id)
+    )
 
     if scope.is_admin:
         pass  # no filter
@@ -610,7 +640,15 @@ async def list_products(
 
     stmt = stmt.order_by(Product.created_at.desc()).offset(skip).limit(limit)
     result = await db.execute(stmt)
-    return list(result.scalars().all())
+    rows = result.all()
+
+    products: list[Product] = []
+    for product, rack, room in rows:
+        setattr(product, "rack", rack)
+        setattr(product, "room", room)
+        products.append(product)
+
+    return products
 
 
 async def get_product_by_id(
